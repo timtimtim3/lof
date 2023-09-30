@@ -6,8 +6,10 @@ from abc import ABC, abstractmethod
 
 
 class GridEnv(ABC, gym.Env):
+    
     metadata = {'render.modes': ['human'],
         'video.frames_per_second': 20}
+    
     LEFT, UP, RIGHT, DOWN = 0, 1, 2, 3
 
     @property
@@ -27,7 +29,7 @@ class GridEnv(ABC, gym.Env):
     [1] Icarte, RT, et al. "Reward Machines: Exploiting Reward Function Structure in Reinforcement Learning".
     """
 
-    def __init__(self, add_obj_to_start, random_act_prob):
+    def __init__(self, add_obj_to_start, random_act_prob, init_state=None):
         """
         Creates a new instance of the coffee environment.
 
@@ -41,6 +43,8 @@ class GridEnv(ABC, gym.Env):
         self.initial = []
         self.occupied = set()
         self.object_ids = dict()
+
+        self.init_state = init_state
 
         for c in range(self.width):
             for r in range(self.height):
@@ -63,15 +67,13 @@ class GridEnv(ABC, gym.Env):
         """
         Create mapping from coordinates to state id and inverse mapping
         """
-        self.state_to_coords = {}
+        self.states = []
         idx = 0
         for i in range(0, self.MAP.shape[0]):
             for j in range(0, self.MAP.shape[1]):
                 if self.MAP[i][j] == "X":
                     continue
-                self.state_to_coords[idx] = (i, j)
-                idx += 1
-        self.coords_to_state = dict(reversed(item) for item in self.state_to_coords.items())
+                self.states.append((i, j))
 
     @abstractmethod
     def _create_transition_function(self):
@@ -82,9 +84,9 @@ class GridEnv(ABC, gym.Env):
         self.P = np.zeros((self.s_dim, self.a_dim, self.s_dim))
         for start_s in range(self.s_dim):
             for eff_a in range(self.a_dim):
-                start_coords = self.state_to_coords[start_s]
+                start_coords = self.states[start_s]
                 new_coords = self.base_movement(start_coords, eff_a)
-                new_s = self.coords_to_state[new_coords]
+                new_s = self.states.index(new_coords)
                 for a in range(self.a_dim):
                     if eff_a == a:
                         self.P[start_s, a, new_s] += 1-self.random_act_prob
@@ -103,9 +105,9 @@ class GridEnv(ABC, gym.Env):
         self.action_space.seed(seed)
         self.observation_space.seed(seed)
 
-    def reset(self, state=None):
-        if state is not None:
-            self.state = state
+    def reset(self):
+        if self.init_state is not None:
+            self.state = self.init_state
         else:
             self.state = random.choice(self.initial)
         return self.state_to_array(self.state)
@@ -131,9 +133,9 @@ class GridEnv(ABC, gym.Env):
     def step(self, action):
         # Movement
         old_state = self.state
-        old_state_index = self.coords_to_state[old_state]
+        old_state_index = self.states.index(old_state)
         new_state_index = np.random.choice(a=self.s_dim, p=self.P[old_state_index, action])
-        new_state = self.state_to_coords[new_state_index]
+        new_state = self.states[new_state_index]
 
         self.state = new_state
 
@@ -186,7 +188,7 @@ class GridEnv(ABC, gym.Env):
 
     @property
     def s_dim(self):
-        return len(self.state_to_coords)
+        return len(self.states)
 
     def render(self, mode='human'):
         if self.viewer is None:
@@ -232,15 +234,15 @@ class GridEnv(ABC, gym.Env):
 class DeliveryMini(GridEnv):
     
     MAP = np.array([['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
-                    ['O', 'O', 'B', 'O', 'O', ' ', 'O', 'O', ],
+                    ['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
                     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ],
                     ['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
                     ['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
-                    [' ', 'A', ' ', ' ', ' ', ' ', ' ', ' ', ],
+                    ['A', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', 'O', ],
                     ['O', 'O', 'O', 'H', 'O', 'O', 'O', 'O', ],])
     
-    PHI_OBJ_TYPES = ['A', 'B', 'H']
+    PHI_OBJ_TYPES = ['A', 'H']
     
     """
     A simplified version of the office environment introduced in [1].
@@ -249,18 +251,34 @@ class DeliveryMini(GridEnv):
     [1] Icarte, RT, et al. "Reward Machines: Exploiting Reward Function Structure in Reinforcement Learning".
     """
 
-    def __init__(self, add_obj_to_start=True, random_act_prob=0.0):
-        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob)
+    def __init__(self, add_obj_to_start=True, random_act_prob=0.0, init_state=None):
+        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob, init_state=init_state)
         self._create_coord_mapping()
         self._create_transition_function()
 
-        exit_states = {}
+        self.obstacles = []
+
+        for c in range(self.width):
+            for r in range(self.height):
+                if self.MAP[r, c] == 'O':
+                    self.obstacles.append((r, c))
+
+        self.exit_states = []
         for s in self.object_ids:
             symbol = self.MAP[s]
-            exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
+            self.exit_states.append(s)
 
-        self.exit_states = exit_states
+        self.rewards = self._make_rewards()
 
+    def _make_rewards(self):
+
+        rewards = np.zeros(self.s_dim)
+
+        for i, s in enumerate(self.states):
+            rewards[i] = self.reward(s)
+
+        return rewards
+        
 
     def _create_transition_function(self):
         self._create_transition_function_base()
@@ -268,9 +286,9 @@ class DeliveryMini(GridEnv):
     def step(self, action):
         # Movement
         old_state = self.state
-        old_state_index = self.coords_to_state[old_state]
+        old_state_index = self.states.index(old_state)
         new_state_index = np.random.choice(a=self.s_dim, p=self.P[old_state_index, action])
-        new_state = self.state_to_coords[new_state_index]
+        new_state = self.states[new_state_index]
 
         self.state = new_state
 
@@ -278,8 +296,11 @@ class DeliveryMini(GridEnv):
         reward = self.reward(old_state)
 
         done = False
+
+        prop = self.MAP[new_state]
+
         
-        return self.state_to_array(self.state), reward, done, {}
+        return self.state_to_array(self.state), reward, done, {'proposition' : prop}
 
     def reward(self, state):
 
@@ -288,7 +309,7 @@ class DeliveryMini(GridEnv):
         y, x = state
 
         if self.MAP[y][x] == "O":
-            reward = -100 
+            reward = -1000 
 
         return reward
 
@@ -351,21 +372,67 @@ class Delivery(GridEnv):
     [1] Icarte, RT, et al. "Reward Machines: Exploiting Reward Function Structure in Reinforcement Learning".
     """
 
-    def __init__(self, add_obj_to_start=True, random_act_prob=0.0):
-        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob)
+    def __init__(self, add_obj_to_start=True, random_act_prob=0.0, init_state=None):
+        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob, init_state=init_state)
         self._create_coord_mapping()
         self._create_transition_function()
 
-        exit_states = {}
+        self.obstacles = []
+
+        for c in range(self.width):
+            for r in range(self.height):
+                if self.MAP[r, c] == 'O':
+                    self.obstacles.append((r, c))
+
+        self.exit_states = []
         for s in self.object_ids:
             symbol = self.MAP[s]
-            exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
+            self.exit_states.append(s)
 
-        self.exit_states = exit_states
+        self.rewards = self._make_rewards()
 
+    def _make_rewards(self):
+
+        rewards = np.zeros(self.s_dim)
+
+        for i, s in enumerate(self.states):
+            rewards[i] = self.reward(s)
+
+        return rewards
+    
 
     def _create_transition_function(self):
         self._create_transition_function_base()
+
+    def step(self, action):
+        # Movement
+        old_state = self.state
+        old_state_index = self.states.index(old_state)
+        new_state_index = np.random.choice(a=self.s_dim, p=self.P[old_state_index, action])
+        new_state = self.states[new_state_index]
+
+        self.state = new_state
+
+        # Determine features and rewards
+        reward = self.reward(old_state)
+
+        done = False
+
+        prop = self.MAP[new_state]
+        
+        return self.state_to_array(self.state), reward, done, {'proposition' : prop}
+
+    def reward(self, state):
+
+        reward = -1 
+
+        y, x = state
+
+        if self.MAP[y][x] == "O":
+            reward = -1000 
+
+        return reward
+
 
     def features(self, state, action, next_state):
         s1 = next_state
@@ -396,5 +463,3 @@ class Delivery(GridEnv):
             else:
                 continue
             square.set_color(*color)
-
-

@@ -6,11 +6,12 @@ from task_specifications import *
 import numpy as np
 
 env = gym.make("DeliveryMini-v0")
+global exit_states_idxs
 
 def learn_options(env):
 
     OPTIONS = {}
-    algorithm = ValueIteration(env)
+    algorithm = ValueIteration(env, gamma=1)
      
     for e in env.unwrapped.exit_states.values():
 
@@ -18,68 +19,95 @@ def learn_options(env):
 
         OPTIONS[e] = {'Q':Q, 'Ro': V, 'To':To}
 
-
     return OPTIONS
 
 def lof_value_iteration(env, OPTIONS, fsa):
 
     F = fsa.states 
     Sdim = env.unwrapped.s_dim 
-    exit_states = env.unwrapped.exit_states
-    
+    exit_states = list(env.unwrapped.exit_states.values())
+
     Q = np.zeros((len(F), Sdim, len(OPTIONS)))
     V = np.zeros((len(F), Sdim))
+
+    obstacles_idxs = list(map(lambda x: env.unwrapped.coords_to_state[x], env.unwrapped.obstacles)) 
+
+    T = fsa.get_transition_matrix()
+
+    T = np.tile(T[:, :, None], (1, 1, Sdim))
+
+    T = np.zeros(T.shape)
+
+    T[0, 0, :] = 1
+    T[0, 0, obstacles_idxs] = 0
+    T[0, 0, exit_states_idxs[0]] = 0
+    T[0, 1, exit_states_idxs[0]] = 1 
+
+    T[1, 1, :] = 1
+    T[1, 1, obstacles_idxs] = 0
+    T[1, 1, exit_states_idxs[1]] = 0
+    T[1, 2, exit_states_idxs[1]] = 1
+
+    T[2, 2, :] = 1
+    T[2, 2, obstacles_idxs] = 0
+    T[2, 2, exit_states_idxs[2]] = 0
+    T[2, 3, exit_states_idxs[2]] = 1
+
+    T[3, 3, :] = 1
+    T[3, 3, obstacles_idxs] = 0
+    T[3, 3, exit_states_idxs[3]] = 0
+    T[3, 4, exit_states_idxs[3]] = 1
+
+    T[4, 4, :] = 1
+
+
+    R = np.ones(len(F))
+    R[-1] = 0
 
     # LOF-VI
     iters = 0
 
-    while True:
+    for _ in range(50):
 
-        iters+=1
+        for oidx, o in enumerate(OPTIONS):
 
-        Q_old = Q.copy()
-        V_old = V.copy()
+            # Qo = OPTIONS[o]['Q']
+            To = OPTIONS[o]['To']
+            Ro = OPTIONS[o]['Ro'] #- 1
 
-        for fidx, sidx in np.ndindex((len(F), Sdim)):
-            
-            f = F[fidx]
+            # Eq. 3 LOF paper
 
-            if f in ('u0', 'u1', 'u3'):
-                continue
+            rewards = R * (np.tile(Ro[:, None], [1, len(F)]) - 1)
 
-            for oidx, o in enumerate(OPTIONS):
+            aux = np.dot(To, V.T)
 
-                # Qo = OPTIONS[o]['Q']
-                To = OPTIONS[o]['To']
-                Ro = OPTIONS[o]['Ro']
+            preQ = rewards + aux
 
-                # Eq. 3 LOF paper
-                next_fsa_states = fsa.get_neighbors(F[fidx])[0]
+            # print(oidx, ((rewards + aux).T).shape)
 
-                exit_state_option = exit_states[oidx]
-                exit_state_idx = env.unwrapped.coords_to_state[exit_state_option]                
+            Q[:, :, oidx] = preQ.T
 
-                aux =  To[sidx, exit_state_idx] * V_old[F.index(next_fsa_states), exit_state_idx] 
+        # print('Rewards', rewards[217, :])
+        # print('Next V', np.round(V.T[217, :], 2))
 
-                print(To[sidx, exit_state_idx])
-                            
-                Q[fidx, sidx, oidx] = Ro[sidx] + np.sum(aux)
-        
         V = Q.max(axis=2)
 
-        if np.allclose(V, V_old):
-            print("Done", iters)
-            break
+        print(V.shape)
 
-
+        preV = np.tile(V[None, ...], (len(F), 1, 1))
+        
+        V = np.sum(T*preV, axis=1)
+    
+    for (f, s) in np.ndindex(V.shape):
+        print(f, s, V[f, s])
     mu = Q.argmax(axis=2)
 
-    print(mu)
+    # print(mu)
 
     
     for f, s in np.ndindex(mu.shape):
-        if f in (0,1,3):
-            continue
+        # if f in [2]:
+        #     continue
         state =  np.unravel_index(s, (env.unwrapped.height, env.unwrapped.width))
         print(F[f], state, env.unwrapped.MAP[state],  mu[f, s], Q[f, s, :])
 
@@ -87,16 +115,24 @@ def lof_value_iteration(env, OPTIONS, fsa):
 
 if __name__ == "__main__":
 
-    env = gym.make("DeliveryMini-v0")
+    env = gym.make("Delivery-v0")
+
+    
+
  
     # STEP 1: Learn options
     OPTIONS = learn_options(env)
 
     # STEP 2: learn the metapolicy for a given FSA
 
-    fsa = fsa_delivery_mini1()
+    fsa = fsa_delivery1()
 
     lof_value_iteration(env, OPTIONS, fsa)
 
+
+    for option in OPTIONS:
+
+        RO = OPTIONS[option]["Ro"]
+        print(RO[exit_states_idxs + [0]])
 
         

@@ -1,25 +1,21 @@
 import gym 
 import envs 
-from algorithms.value_iteration import ValueIteration
+from envs.wrapper import DeliveryAutomatonEnv
 from time import sleep
 
-env = gym.make("DeliveryMini-v0")
-
-obs = env.reset()
-# obs = env.unwrapped.reset((7, 3))
-
-algorithm = ValueIteration(env)
-
-print(env.unwrapped.exit_states)
-
-Q, V, To = algorithm.train(goal_state=(1, 2))
+from algorithms.options import MetapolicyVI
+from task_specifications import *
 
 
-print(V)
+env = gym.make("Delivery-v0")
+eval_env = gym.make("DeliveryEval-v0")
 
-for _ in range(100):
-     state = tuple(obs)
-     obs, reward, done, _ = env.step(Q[env.unwrapped.coords_to_state[state ]].argmax())
-     print(obs, done)
-     env.render()
-     sleep(1)
+
+fsa, T = fsa_delivery1(env)
+eval_env = DeliveryAutomatonEnv(eval_env, fsa, "u0", T)
+
+
+policy = MetapolicyVI(env, eval_env, fsa, T)
+policy.train_metapolicy()
+
+

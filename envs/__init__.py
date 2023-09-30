@@ -5,3 +5,16 @@ gym.envs.register(
     entry_point='envs.grid_envs:DeliveryMini',
     max_episode_steps=200,
 )
+
+gym.envs.register(
+    id='Delivery-v0',
+    entry_point='envs.grid_envs:Delivery',
+    max_episode_steps=200,
+)
+
+gym.envs.register(
+    id='DeliveryEval-v0',
+    entry_point='envs.grid_envs:Delivery',
+    kwargs={'init_state': (14, 7)},
+    max_episode_steps=200,
+)

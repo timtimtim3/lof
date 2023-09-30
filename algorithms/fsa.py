@@ -1,5 +1,6 @@
 
 import networkx as nx
+import numpy as np
 
 class FiniteStateAutomaton:
 
@@ -34,5 +35,6 @@ class FiniteStateAutomaton:
     def is_terminal(self, node):
         return len(list(self.graph.neighbors(node))) < 1
 
-
+    def get_transition_matrix(self):
+        return nx.adjacency_matrix(self.graph).todense() + np.eye(len(self.states))
 
