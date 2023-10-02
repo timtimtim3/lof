@@ -143,7 +143,7 @@ class GridEnv(ABC, gym.Env):
         phi = self.features(old_state, action, new_state)
         reward = np.dot(phi, self.w)
         done = self.is_done(old_state, action, new_state)
-        return self.state_to_array(self.state), reward, done, {'phi': phi}
+        return self.state_to_array(self.state), reward, done, {'phi': phi, 'proposition': self.MAP[new_state]}
 
     # ===========================================================================
     # STATE ENCODING FOR DEEP LEARNING
@@ -266,7 +266,7 @@ class DeliveryMini(GridEnv):
         self.exit_states = []
         for s in self.object_ids:
             symbol = self.MAP[s]
-            self.exit_states.append(s)
+            self.exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
 
         self.rewards = self._make_rewards()
 
@@ -298,7 +298,6 @@ class DeliveryMini(GridEnv):
         done = False
 
         prop = self.MAP[new_state]
-
         
         return self.state_to_array(self.state), reward, done, {'proposition' : prop}
 
@@ -384,10 +383,10 @@ class Delivery(GridEnv):
                 if self.MAP[r, c] == 'O':
                     self.obstacles.append((r, c))
 
-        self.exit_states = []
+        self.exit_states = len(self.object_ids) * [None]
         for s in self.object_ids:
             symbol = self.MAP[s]
-            self.exit_states.append(s)
+            self.exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
 
         self.rewards = self._make_rewards()
 

@@ -26,7 +26,7 @@ class DeliveryAutomatonEnv(gym.Env):
         """
             Low-level and high-level transition
         """
-        self.env.step(action) 
+        _, _ ,  _ , phi = self.env.step(action) 
         state = self.env.state
         state_index = self.env.states.index(state)
 
@@ -43,7 +43,7 @@ class DeliveryAutomatonEnv(gym.Env):
 
         done = self.fsa.is_terminal(self.fsa_state)
 
-        return (self.fsa_state, state), -1, done, {}
+        return (self.fsa_state, state), -1, done, {"proposition": phi["proposition"]}
 
 
 

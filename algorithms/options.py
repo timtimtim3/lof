@@ -135,6 +135,8 @@ class MetapolicyVI(MetaPolicy):
             option = OptionVI(self.env, exit_state, self.gamma)
             num_iters = option.train()
 
+            print(num_iters)
+
             options.append(option)
             
             if self.record:
@@ -180,10 +182,9 @@ class MetapolicyVI(MetaPolicy):
             for (fidx, sidx) in np.ndindex(mu_aux.shape):
                 f, s = self.fsa.states[fidx], self.env.states[sidx]
                 mu[(f, s)] = mu_aux[fidx, sidx]
-
-            success, acc_reward = self.evaluate_meta_policy(mu)
-            print(_, success, acc_reward)
             
+            success, acc_reward = self.evaluate_meta_policy(mu)
+            print(acc_reward)
 
 
         self.Q = Q
@@ -197,27 +198,29 @@ class MetapolicyVI(MetaPolicy):
             mu[(f, s)] = mu_aux[fidx, sidx]
         
         self.mu = mu
-        
 
-    def evaluate_meta_policy(self, policy, max_steps=200):
+        
+    def evaluate_meta_policy(self, policy, log=False, max_steps=200):
 
         state = self.eval_env.reset()
 
-        acc_reward = 0
-        success = False
+        acc_reward, success = 0, False
 
         for _ in range(max_steps):
 
             option = policy[state]
-            (_, llstate) = state
+            (f_state, llstate) = state
 
             action = self.options[option].Q[self.env.states.index(llstate)].argmax()
 
-            state, reward, done, _ = self.eval_env.step(action)
+            state, reward, done, info = self.eval_env.step(action)
             acc_reward += reward
 
+            if log:
+                print( acc_reward)
+
             if done:
-                success = True
+                success = self.fsa.is_terminal(f_state)
                 break
 
         return success, acc_reward
