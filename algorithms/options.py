@@ -1,6 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from .utils import evaluate_meta_policy
+from time import sleep
 
 class OptionBase(ABC):
 
@@ -135,8 +136,6 @@ class MetapolicyVI(MetaPolicy):
             option = OptionVI(self.env, exit_state, self.gamma)
             num_iters = option.train()
 
-            print(num_iters)
-
             options.append(option)
             
             if self.record:
@@ -145,7 +144,7 @@ class MetapolicyVI(MetaPolicy):
         return options
 
 
-    def train_metapolicy(self):
+    def train_metapolicy(self, exit_idxs=None):
 
 
         Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
@@ -169,7 +168,9 @@ class MetapolicyVI(MetaPolicy):
                 preQ = rewards + next_value
 
                 Q[:, :, oidx] = preQ.T
-
+            if exit_idxs != None:
+                print(Q[-2, exit_idxs], Q[-2, exit_idxs].argmax(axis=1))
+                sleep(0.2)
             V = Q.max(axis=2)
             preV = np.tile(V[None, ...], (len(self.fsa.states), 1, 1))
             # Multiply by T before passing to next iteration (masks value function)
@@ -184,7 +185,7 @@ class MetapolicyVI(MetaPolicy):
                 mu[(f, s)] = mu_aux[fidx, sidx]
             
             success, acc_reward = self.evaluate_meta_policy(mu)
-            print(acc_reward)
+            # print(acc_reward)
 
 
         self.Q = Q
@@ -200,27 +201,42 @@ class MetapolicyVI(MetaPolicy):
         self.mu = mu
 
         
-    def evaluate_meta_policy(self, policy, log=False, max_steps=200):
-
-        state = self.eval_env.reset()
+    def evaluate_meta_policy(self, policy, log=False, max_steps=100, max_steps_option=30):
 
         acc_reward, success = 0, False
+        num_steps = 0
 
-        for _ in range(max_steps):
+        (f_state, state) = self.eval_env.reset()
 
-            option = policy[state]
-            (f_state, llstate) = state
+        options_used = 0
 
-            action = self.options[option].Q[self.env.states.index(llstate)].argmax()
+        while num_steps < max_steps:
 
-            state, reward, done, info = self.eval_env.step(action)
-            acc_reward += reward
+            option = policy[(f_state, state)]
+            options_used+=1
+            
+            old_f_state = f_state
+            steps_in_option = 0
+            done = False
+
+            while steps_in_option < max_steps_option and old_f_state == f_state:
+
+                action = self.options[option].Q[self.env.states.index(state)].argmax()
+
+                (f_state, state), reward, done, _ = self.eval_env.step(action)
+
+                num_steps+=1
+                acc_reward += reward
+                steps_in_option+=1
+                
+                if done:
+                    break
 
             if log:
-                print( acc_reward)
+                print(acc_reward)
 
             if done:
                 success = self.fsa.is_terminal(f_state)
                 break
-
+        
         return success, acc_reward
