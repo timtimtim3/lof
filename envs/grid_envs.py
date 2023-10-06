@@ -111,6 +111,15 @@ class GridEnv(ABC, gym.Env):
         else:
             self.state = random.choice(self.initial)
         return self.state_to_array(self.state)
+    
+    def random_reset(self):
+        states = [s for s in self.states if s not in self.exit_states]
+
+        random_idx = np.random.randint(0, len(states))
+
+        self.state = states[random_idx] 
+
+        return self.state_to_array(self.state)
 
     def base_movement(self, coords, action):
         row, col = coords

@@ -5,29 +5,25 @@ from time import sleep
 
 class OptionBase(ABC):
 
-    def __init__(self, env, subgoal_state):
+    def __init__(self, env, subgoal_state, gamma):
         self.env = env
         self.s_dim = env.s_dim 
         self.states = env.states
         self.a_dim = env.action_space.n
         self.subgoal_state = subgoal_state
-        self.Q = None 
-        self.Ro = None
-        self.To = None
+        self.subgoal_idx = env.states.index(subgoal_state)
+        self.gamma = gamma
+        self.Q = np.zeros((self.s_dim, self.a_dim))
+        self.Ro = np.zeros(self.s_dim)
+        self.To = np.zeros((self.s_dim, self.s_dim))
 
-    @abstractmethod
-    def train(self):
-
-        raise NotImplementedError
     
 
 class OptionVI(OptionBase):
 
     def __init__(self, env, subgoal_state, gamma=1):
-        super().__init__(env, subgoal_state)
+        super().__init__(env, subgoal_state, gamma)
         
-        self.gamma = gamma
-
     
     def train(self):
         
@@ -91,6 +87,33 @@ class OptionVI(OptionBase):
         self.To = To
 
         return iters
+    
+class OptionQLearning(OptionBase):
+
+    def __init__(self, env, subgoal_state, gamma=1, alpha=0.2):
+        super().__init__(env, subgoal_state, gamma)
+        
+        self.alpha = alpha
+        self.To = np.zeros((self.s_dim, self.s_dim))
+        self.To[self.subgoal_idx, self.subgoal_idx] = 1
+
+    
+    def update_qfunction(self, state, action, next_state, reward):
+
+        if state != self.subgoal_state:
+
+            done = next_state == self.subgoal_state
+
+            state_idx = self.env.states.index(state)
+            next_state_idx =  self.env.states.index(next_state)
+            subgoal_idx = self.env.states.index(self.subgoal_state)
+
+            update = reward + self.gamma * (1 - done) * self.Q[next_state_idx, :].max() - self.Q[state_idx, action]
+            self.Q[state_idx, action] += self.alpha * update
+            self.Ro[state_idx] = self.Q[state_idx, :].max()
+            u1, u2 = self.To[state_idx, subgoal_idx], self.gamma * self.To[next_state_idx, subgoal_idx]
+            self.To[state_idx, subgoal_idx] = np.max([u1, u2])
+
 
 class MetaPolicy(ABC):
 
@@ -101,12 +124,16 @@ class MetaPolicy(ABC):
         self.gamma = gamma
         self.record = record
 
-    
+    @abstractmethod
+    def _learn_options(self):
+        raise NotImplementedError 
+
     def train(self):
-        pass
+        raise NotImplementedError 
 
+    
 
-class MetapolicyVI(MetaPolicy):
+class MetaPolicyVI(MetaPolicy):
 
     def __init__(self, env, eval_env, fsa, T, gamma=1., record=True, num_iters = 50):
         super().__init__(env, gamma, record)
@@ -126,6 +153,7 @@ class MetapolicyVI(MetaPolicy):
     
 
     def _learn_options(self):
+        
         """
             Automatically learns an option (with ValueIteration) per exit state.
         """
@@ -169,7 +197,6 @@ class MetapolicyVI(MetaPolicy):
 
                 Q[:, :, oidx] = preQ.T
             if exit_idxs != None:
-                print(Q[-2, exit_idxs], Q[-2, exit_idxs].argmax(axis=1))
                 sleep(0.2)
             V = Q.max(axis=2)
             preV = np.tile(V[None, ...], (len(self.fsa.states), 1, 1))
@@ -201,6 +228,105 @@ class MetapolicyVI(MetaPolicy):
         self.mu = mu
 
         
+    def evaluate_meta_policy(self, policy, log=False, max_steps=100, max_steps_option=30):
+
+        acc_reward, success = 0, False
+        num_steps = 0
+
+        (f_state, state) = self.eval_env.reset()
+
+        options_used = 0
+
+        while num_steps < max_steps:
+
+            option = policy[(f_state, state)]
+            options_used+=1
+            
+            old_f_state = f_state
+            steps_in_option = 0
+            done = False
+
+            while steps_in_option < max_steps_option and old_f_state == f_state:
+
+                action = self.options[option].Q[self.env.states.index(state)].argmax()
+
+                (f_state, state), reward, done, _ = self.eval_env.step(action)
+
+                num_steps+=1
+                acc_reward += reward
+                steps_in_option+=1
+                
+                if done:
+                    break
+
+            if log:
+                print(acc_reward)
+
+            if done:
+                success = self.fsa.is_terminal(f_state)
+                break
+        
+        return success, acc_reward
+    
+
+class MetaPolicyQLearning(MetaPolicy):
+
+    def __init__(self, env, gamma=1, record=True, alpha=0.2, epsilon=0.3, num_episodes=200, episode_length=100, eval_freq=20):
+        super().__init__(env, gamma, record)
+        self.alpha = alpha
+
+        self.options = []
+        self.epsilon = epsilon
+        self.num_episodes = num_episodes 
+        self.episode_length = episode_length
+        self.eval_freq = eval_freq
+
+        for subgoal in env.exit_states:
+
+            option = OptionQLearning(self.env, subgoal, self.gamma, self.alpha)
+            self.options.append(option)
+
+        if self.record:
+            pass
+
+    def get_epsilon_greedy_action(self, option_idx, state, epsilon):
+        if np.random.rand() < 0.3:
+            return np.random.randint(0, self.env.action_space.n)
+        else:
+            state_idx = self.options[option_idx].states.index(state)
+            return self.options[option_idx].Q[state_idx, :].argmax()
+
+    def _learn_options(self):
+        
+        num_options = len(self.options)
+
+        self.env.reset()
+
+        for i in range(self.num_episodes):
+
+            self.env.random_reset()
+
+            # Use one option at a time
+            option_idx = i % num_options    
+            
+            num_steps = 0
+
+            while num_steps  < self.episode_length:
+                
+                num_steps += 1
+
+                current_state  = self.env.state
+                action = self.get_epsilon_greedy_action(option_idx, current_state, self.epsilon)
+                _, r, _, _ = self.env.step(action)
+                next_state = self.env.state
+
+                # Intra option learning
+                for option in self.options:
+                    option.update_qfunction(current_state, action, next_state, r)
+
+        self.env.reset()
+
+    
     def evaluate_meta_policy(self, policy, log=False, max_steps=100, max_steps_option=30):
 
         acc_reward, success = 0, False
