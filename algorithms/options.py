@@ -1,5 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
+import time
 
 def __init__():
     pass
@@ -151,6 +152,8 @@ class MetaPolicy(ABC):
         terminals = [self.fsa.is_terminal(s) for s in self.fsa.states]
         R[np.where(terminals)] = 0
 
+        start = time.time() if record else None
+
         for j in range(self.num_iters):
 
             for oidx, option in enumerate(self.options):
@@ -180,11 +183,12 @@ class MetaPolicy(ABC):
                 mu[(f, s)] = mu_aux[fidx, sidx]
             
             if record:
+                rtime = time.time() - start
                 success, acc_reward = self.evaluate_meta_policy(mu)
                 self.writer.add_scalar("metrics/evaluation/success", int(success), j)
                 self.writer.add_scalar("metrics/evaluation/acc_reward", acc_reward, j)
                 self.writer.add_scalar("metrics/evaluation/iter", j)
-
+                self.writer.add_scalar("metrics/evaluation/time", rtime, j)
 
 
         self.Q = Q
