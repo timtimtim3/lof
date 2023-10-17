@@ -1,7 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from .utils import evaluate_meta_policy
-from time import sleep
+
+def __init__():
+    pass
 
 class OptionBase(ABC):
 
@@ -240,16 +241,11 @@ class MetaPolicy(ABC):
 
 class MetaPolicyVI(MetaPolicy):
 
-    def __init__(self, env, eval_env, fsa, T, gamma=1., num_iters = 50, writer=None, record = True):
+    def __init__(self, env, eval_env, fsa, T, gamma=1., num_iters = 50, writer=None):
         super().__init__(env, eval_env, fsa, T, gamma, num_iters, writer)
 
         self.num_iters = num_iters
         self.eval_env = eval_env
-
-        self.record = record
-
-        if self.record:
-            self.num_iterations_per_option = []
 
         self.options = self._learn_options()
         self.Q = None 
@@ -265,14 +261,13 @@ class MetaPolicyVI(MetaPolicy):
 
         options = []
 
-        for exit_state in self.env.exit_states:
+        for i, exit_state in enumerate(self.env.exit_states):
             option = OptionVI(self.env, exit_state, self.gamma)
             num_iters = option.train()
 
             options.append(option)
-            
-            if self.record:
-                self.num_iterations_per_option.append(num_iters)
+
+            self.writer.add_scalar(f"options/option{i}", num_iters)
 
         return options
 
@@ -340,7 +335,7 @@ class MetaPolicyQLearning(MetaPolicy):
 
                 if total_steps % self.eval_freq == 0:
                     # Log in tensorboard the performance during training
-                    metapolicy = self.train_metapolicy(60)
+                    metapolicy = self.train_metapolicy()
                     success, reward = self.evaluate_meta_policy(metapolicy)
                     self.writer.add_scalar("metrics/success", int(success), total_steps)
                     self.writer.add_scalar("metrics/reward", reward, total_steps)
