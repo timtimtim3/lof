@@ -138,7 +138,7 @@ class MetaPolicy(ABC):
     #     raise NotImplementedError 
     
     @abstractmethod
-    def evaluate_meta_policy(self, policy, log=False, max_steps=100, max_steps_option=30):
+    def evaluate_metapolicy(self, policy, log=False, max_steps=100, max_steps_option=30):
         raise NotImplementedError
     
 
@@ -152,9 +152,11 @@ class MetaPolicy(ABC):
         terminals = [self.fsa.is_terminal(s) for s in self.fsa.states]
         R[np.where(terminals)] = 0
 
-        start = time.time() if record else None
+        times = [0]
 
         for j in range(self.num_iters):
+
+            iter_start = time.time() if record else None
 
             for oidx, option in enumerate(self.options):
 
@@ -181,14 +183,18 @@ class MetaPolicy(ABC):
             for (fidx, sidx) in np.ndindex(mu_aux.shape):
                 f, s = self.fsa.states[fidx], self.env.states[sidx]
                 mu[(f, s)] = mu_aux[fidx, sidx]
+
+            elapsed_iter = time.time() - iter_start if record else None
+
+            times.append(elapsed_iter)
             
             if record:
-                rtime = time.time() - start
-                success, acc_reward = self.evaluate_meta_policy(mu)
+                
+                success, acc_reward = self.evaluate_metapolicy(mu)
                 self.writer.add_scalar("metrics/evaluation/success", int(success), j)
                 self.writer.add_scalar("metrics/evaluation/acc_reward", acc_reward, j)
                 self.writer.add_scalar("metrics/evaluation/iter", j)
-                self.writer.add_scalar("metrics/evaluation/time", rtime, j)
+                self.writer.add_scalar("metrics/evaluation/time", np.sum(times), j)
 
 
         self.Q = Q
@@ -204,7 +210,7 @@ class MetaPolicy(ABC):
         self.mu = mu
         return mu
     
-    def evaluate_meta_policy(self, policy, max_steps=100, max_steps_option=30):
+    def evaluate_metapolicy(self, policy, max_steps=100, max_steps_option=30):
 
         acc_reward, success = 0, False
         num_steps = 0
@@ -340,7 +346,7 @@ class MetaPolicyQLearning(MetaPolicy):
                 if total_steps % self.eval_freq == 0:
                     # Log in tensorboard the performance during training
                     metapolicy = self.train_metapolicy()
-                    success, reward = self.evaluate_meta_policy(metapolicy)
+                    success, reward = self.evaluate_metapolicy(metapolicy)
                     self.writer.add_scalar("metrics/success", int(success), total_steps)
                     self.writer.add_scalar("metrics/reward", reward, total_steps)
                     self.writer.add_scalar("metrics/episode", i, total_steps)
