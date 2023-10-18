@@ -1,6 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
 import time
+import pickle as pkl
+import os
 
 def __init__():
     pass
@@ -19,6 +21,12 @@ class OptionBase(ABC):
         self.Ro = np.zeros(self.s_dim)
         self.To = np.zeros((self.s_dim, self.s_dim))
 
+
+    def save(self, path: str):
+        
+        pkl.dump(self.Q, open(os.path.join(f"{path}", "Q.pkl"), "wb"))
+        pkl.dump(self.Ro, open(os.path.join(f"{path}", "Ro.pkl"), "wb"))
+        pkl.dump(self.To, open(os.path.join(f"{path}", "To.pkl"), "wb"))
     
 
 class OptionVI(OptionBase):
@@ -140,6 +148,17 @@ class MetaPolicy(ABC):
     @abstractmethod
     def evaluate_metapolicy(self, policy, log=False, max_steps=100, max_steps_option=30):
         raise NotImplementedError
+    
+    def save(self, path:str):
+        
+        for i, option in enumerate(self.options):
+
+            fullpath = os.path.join(path, f"options/option{i}/")
+            os.makedirs(fullpath)
+            option.save(fullpath)
+    
+        pkl.dump(self.Q, open(os.path.join(path,"Q.pkl"), "wb"))
+        pkl.dump(self.mu, open(os.path.join(path,"metapolicy.pkl"), "wb"))
     
 
     def train_metapolicy(self, record=False):

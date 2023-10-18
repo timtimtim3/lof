@@ -6,7 +6,7 @@ import gym
 from task_spec import load_fsa
 from envs.wrapper import DeliveryAutomatonEnv
 from torch.utils.tensorboard import SummaryWriter
-
+import os
 
 @hydra.main(version_base=None, config_path="conf", config_name="default")
 def main(cfg: DictConfig) -> None:
@@ -14,7 +14,7 @@ def main(cfg: DictConfig) -> None:
     run = wandb.init(
         config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True),
         entity=cfg.wandb.entity, project=cfg.wandb.project,
-        sync_tensorboard=True,
+        sync_tensorboard=True, tags=["lof"]
     )
 
     writer = SummaryWriter(f"/tmp/{run.name}")
@@ -38,6 +38,10 @@ def main(cfg: DictConfig) -> None:
 
     policy._learn_options()
     policy.train_metapolicy(record=True)
+
+    os.makedirs(f"results/{run.name}/options")
+
+    policy.save(f"results/{run.name}")
 
     writer.close()
     wandb.finish()
