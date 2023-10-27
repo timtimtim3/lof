@@ -199,20 +199,20 @@ class MetaPolicy(ABC):
             mu_aux = Q.argmax(axis=2)
             mu = {}
 
+            elapsed_iter = time.time() - iter_start if record else None
+
             for (fidx, sidx) in np.ndindex(mu_aux.shape):
                 f, s = self.fsa.states[fidx], self.env.states[sidx]
                 mu[(f, s)] = mu_aux[fidx, sidx]
 
-            elapsed_iter = time.time() - iter_start if record else None
-
             times.append(elapsed_iter)
             
             if record:
-                
+    
                 success, acc_reward = self.evaluate_metapolicy(mu)
                 self.writer.add_scalar("metrics/evaluation/success", int(success), j)
                 self.writer.add_scalar("metrics/evaluation/acc_reward", acc_reward, j)
-                self.writer.add_scalar("metrics/evaluation/iter", j)
+                self.writer.add_scalar("metrics/evaluation/iter", j, j)
                 self.writer.add_scalar("metrics/evaluation/time", np.sum(times), j)
 
 
@@ -250,7 +250,6 @@ class MetaPolicy(ABC):
             while steps_in_option < max_steps_option and old_f_state == f_state:
 
                 action = self.options[option].Q[self.env.states.index(state)].argmax()
-
                 (f_state, state), reward, done, _ = self.eval_env.step(action)
 
                 num_steps+=1
@@ -364,11 +363,11 @@ class MetaPolicyQLearning(MetaPolicy):
 
                 if total_steps % self.eval_freq == 0:
                     # Log in tensorboard the performance during training
-                    metapolicy = self.train_metapolicy()
+                    metapolicy = self.train_metapolicy(False)
                     success, reward = self.evaluate_metapolicy(metapolicy)
-                    self.writer.add_scalar("metrics/success", int(success), total_steps)
-                    self.writer.add_scalar("metrics/reward", reward, total_steps)
-                    self.writer.add_scalar("metrics/episode", i, total_steps)
+                    self.writer.add_scalar("learning/success", int(success), total_steps)
+                    self.writer.add_scalar("learning/reward", reward, total_steps)
+                    self.writer.add_scalar("learning/episode", i, total_steps)
 
 
         self.env.reset()

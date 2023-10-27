@@ -71,8 +71,6 @@ class GridEnv(ABC, gym.Env):
         idx = 0
         for i in range(0, self.MAP.shape[0]):
             for j in range(0, self.MAP.shape[1]):
-                if self.MAP[i][j] == "X":
-                    continue
                 self.states.append((i, j))
 
     @abstractmethod
@@ -242,14 +240,14 @@ class GridEnv(ABC, gym.Env):
 
 class DeliveryMini(GridEnv):
     
-    MAP = np.array([['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
-                    ['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
+    MAP = np.array([['X', 'X', ' ', 'X', 'X', ' ', 'X', 'X', ],
+                    ['X', 'X', ' ', 'X', 'X', ' ', 'X', 'X', ],
                     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ],
-                    ['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
-                    ['O', 'O', ' ', 'O', 'O', ' ', 'O', 'O', ],
+                    ['X', 'X', ' ', 'X', 'X', ' ', 'X', 'X', ],
+                    ['X', 'X', ' ', 'X', 'X', ' ', 'X', 'X', ],
                     ['A', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', 'O', ],
-                    ['O', 'O', 'O', 'H', 'O', 'O', 'O', 'O', ],])
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', 'X', ],
+                    ['X', 'X', 'X', 'H', 'X', 'X', 'X', 'X', ],])
     
     PHI_OBJ_TYPES = ['A', 'H']
     
@@ -269,7 +267,7 @@ class DeliveryMini(GridEnv):
 
         for c in range(self.width):
             for r in range(self.height):
-                if self.MAP[r, c] == 'O':
+                if self.MAP[r, c] == 'X':
                     self.obstacles.append((r, c))
 
         self.exit_states = []
@@ -316,7 +314,7 @@ class DeliveryMini(GridEnv):
 
         y, x = state
 
-        if self.MAP[y][x] == "O":
+        if self.MAP[y][x] == 'X':
             reward = -1000 
 
         return reward
@@ -330,7 +328,7 @@ class DeliveryMini(GridEnv):
             y, x = s1
             object_index = self.all_objects[self.MAP[y, x]]
             phi[object_index] = 1.
-        elif self.MAP[s1] == "O":
+        elif self.MAP[s1] == 'X':
             phi[:] = -100
         
         return phi
@@ -340,7 +338,7 @@ class DeliveryMini(GridEnv):
         for square_coords in square_map:
             square = square_map[square_coords]
             # Teleport
-            if self.MAP[square_coords] == 'O' :
+            if self.MAP[square_coords] == 'X' :
                 color = [0, 0, 0]
             elif self.MAP[square_coords] == 'A' :
                 color = [1, 0, 0]
@@ -355,21 +353,21 @@ class DeliveryMini(GridEnv):
 
 class Delivery(GridEnv):
     
-    MAP = np.array([['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', 'C', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
+    MAP = np.array([['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', 'C', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
                     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
                     [' ', 'A', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
                     [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ','  ', 'B', ' ', ' ', ' ' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', 'H', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],])
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],
+                    ['X', 'X', 'X', ' ', 'X', 'X', 'X', 'H', 'X', 'X', 'X', ' ', 'X', 'X', 'X' ],])
     
     PHI_OBJ_TYPES = ['A', 'B', 'C', 'H']
     
@@ -389,7 +387,7 @@ class Delivery(GridEnv):
 
         for c in range(self.width):
             for r in range(self.height):
-                if self.MAP[r, c] == 'O':
+                if self.MAP[r, c] == 'X':
                     self.obstacles.append((r, c))
 
         self.exit_states = len(self.object_ids) * [None]
@@ -436,7 +434,7 @@ class Delivery(GridEnv):
 
         y, x = state
 
-        if self.MAP[y][x] == "O":
+        if self.MAP[y][x] == 'X':
             reward = -1000 
 
         return reward
@@ -450,7 +448,7 @@ class Delivery(GridEnv):
             y, x = s1
             object_index = self.all_objects[self.MAP[y, x]]
             phi[object_index] = 1.
-        elif self.MAP[s1] == "O":
+        elif self.MAP[s1] == 'X':
             phi[:] = -100
         
         return phi
@@ -460,7 +458,7 @@ class Delivery(GridEnv):
         for square_coords in square_map:
             square = square_map[square_coords]
             # Teleport
-            if self.MAP[square_coords] == 'O' :
+            if self.MAP[square_coords] == 'X' :
                 color = [0, 0, 0]
             elif self.MAP[square_coords] == 'A' :
                 color = [1, 0, 0]
@@ -471,3 +469,99 @@ class Delivery(GridEnv):
             else:
                 continue
             square.set_color(*color)
+
+
+class OfficeComplex(GridEnv):
+    MAP = np.array([[' ', ' ', ' ',   'X', ' ', 'C2', ' ', ' '],
+                     [' ', ' ', 'C1', 'X', 'X', ' ', ' ', ' '],
+                     ['M2', ' ', ' ',  ' ', 'X', 'O2', ' ', ' '],
+                     [' ', ' ', ' ',  ' ',  'X', ' ', ' ', ' '],
+                     [' ', ' ', ' ',  ' ',  'X', ' ', ' ', ' '],
+                     [' ', ' ', ' ',  ' ',  ' ', ' ', ' ', ' '],
+                     [' ', ' ', '_',  ' ',  ' ', ' ', ' ', ' '],
+                     ['O1', ' ',' ',  ' ',  ' ', ' ', ' ', 'M1'], ])
+    
+    PHI_OBJ_TYPES = ['C1', 'C2', 'O1', 'O2', 'M1', 'M2']
+    
+    """
+    A simplified version of the office environment introduced in [1].
+    This simplified version consists of 2 coffee machines and 2 office locations.
+
+    [1] Icarte, RT, et al. "Reward Machines: Exploiting Reward Function Structure in Reinforcement Learning".
+    """
+
+    def __init__(self, add_obj_to_start=True, random_act_prob=0.0, init_state=None):
+        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob, init_state=init_state)
+        self._create_coord_mapping()
+        self._create_transition_function()
+
+        self.obstacles = []
+
+        for c in range(self.width):
+            for r in range(self.height):
+                if self.MAP[r, c] == 'X':
+                    self.obstacles.append((r, c))
+
+        self.exit_states = len(self.object_ids) * [None]
+        for s in self.object_ids:
+            symbol = self.MAP[s]
+            self.exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
+
+        self.rewards = self._make_rewards()
+
+
+    def _make_rewards(self):
+
+        rewards = np.zeros(self.s_dim)
+
+        for i, s in enumerate(self.states):
+            rewards[i] = self.reward(s)
+
+        return rewards
+    
+
+    def _create_transition_function(self):
+        self._create_transition_function_base()
+
+    def step(self, action):
+        # Movement
+        old_state = self.state
+        old_state_index = self.states.index(old_state)
+        new_state_index = np.random.choice(a=self.s_dim, p=self.P[old_state_index, action])
+        new_state = self.states[new_state_index]
+
+        self.state = new_state
+
+        # Determine features and rewards
+        reward = self.reward(old_state)
+
+        done = False
+
+        prop = self.MAP[new_state]
+        
+        return self.state_to_array(self.state), reward, done, {'proposition' : prop}
+
+    def reward(self, state):
+
+        reward = -1 
+
+        y, x = state
+
+        if self.MAP[y][x] == 'X':
+            reward = -1000 
+
+        return reward
+
+
+    def features(self, state, action, next_state):
+        s1 = next_state
+        nc = self.feat_dim
+        phi = np.zeros(nc, dtype=np.float32)
+        if s1 in self.object_ids:
+            y, x = s1
+            object_index = self.all_objects[self.MAP[y, x]]
+            phi[object_index] = 1.
+        elif self.MAP[s1] == 'X':
+            phi[:] = -100
+        
+        return phi

@@ -1,0 +1,7 @@
+# @package _global_
+defaults:
+  - override /algorithm: vi
+  - override /env: delivery
+
+seed: 42
+fsa_name: delivery_task2

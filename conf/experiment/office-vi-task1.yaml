@@ -1,0 +1,7 @@
+# @package _global_
+defaults:
+  - override /algorithm: vi
+  - override /env: office
+
+seed: 42
+fsa_name: office_task1

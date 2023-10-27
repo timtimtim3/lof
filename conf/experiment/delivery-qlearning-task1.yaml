@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - override /algorithm: qlearning
+  - override /env: delivery
+
+seed: 42
+fsa_name: delivery_task1
+algorithm:
+  alpha: 0.2
+  epsilon: 0.3
+  num_episodes: 800
+  episode_length: 150
+  eval_freq: 500

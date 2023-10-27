@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 
-class DeliveryAutomatonEnv(gym.Env):
+class GridAutomatonEnv(gym.Env):
 
 
     def __init__(self, env, fsa, fsa_init_state, T):
@@ -33,6 +33,7 @@ class DeliveryAutomatonEnv(gym.Env):
         fsa_state_index = self.fsa.states.index(self.fsa_state)
 
         next_fsa_state_idxs = np.where(self.T[fsa_state_index, :, state_index] == 1)[0]
+
 
         if len(next_fsa_state_idxs) == 0:
             return (self.fsa_state, state), -100, True, {}

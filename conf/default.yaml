@@ -1,0 +1,8 @@
+defaults:
+  - _self_
+  - env: ???
+  - algorithm: ???
+  - wandb: default
+
+seed: ???
+num_iters: 50

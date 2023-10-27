@@ -3,8 +3,8 @@ from omegaconf import DictConfig, OmegaConf
 import wandb 
 from utils import seed_everything 
 import gym 
+import envs
 from task_spec import load_fsa
-from envs.wrapper import DeliveryAutomatonEnv
 from torch.utils.tensorboard import SummaryWriter
 import os
 
@@ -22,26 +22,31 @@ def main(cfg: DictConfig) -> None:
     # Set seeds
     seed_everything(cfg.seed)
 
-    env_config = dict(cfg.env)
+    env_cfg = dict(cfg.env)
 
-    env_name = env_config.pop("gym_name")
-    eval_name = env_config.pop("eval_name")
-    
+    # Load the environments (train and eval)
+    env_name = env_cfg.pop("gym_name")
+    eval_name = env_cfg.pop("eval_name")
     env = gym.make(env_name)
-
     eval_env = gym.make(eval_name)
     fsa, T = load_fsa(cfg.fsa_name, env)
-    eval_env = DeliveryAutomatonEnv(eval_env, fsa,  "u0", T)
 
+    eval_env = hydra.utils.call(config=env_cfg.pop("eval_env"), env=eval_env, fsa=fsa, fsa_init_state="u0", T=T)
+
+    # Load the algorithm and run it
     policy = hydra.utils.call(config=cfg.algorithm, writer=writer, env=env, eval_env=eval_env, fsa=fsa, T=T)
-
 
     policy._learn_options()
     policy.train_metapolicy(record=True)
 
+    # Create and save options and metapolicy
     os.makedirs(f"results/{run.name}/options")
-
     policy.save(f"results/{run.name}")
+
+
+    print([o.Q[env.states.index((6,2))].max() for o in policy.options])
+    print(policy.Q[0, env.states.index((6,2))])
+
 
     writer.close()
     wandb.finish()
