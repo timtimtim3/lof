@@ -43,11 +43,6 @@ def main(cfg: DictConfig) -> None:
     os.makedirs(f"results/{run.name}/options")
     policy.save(f"results/{run.name}")
 
-
-    print([o.Q[env.states.index((6,2))].max() for o in policy.options])
-    print(policy.Q[0, env.states.index((6,2))])
-
-
     writer.close()
     wandb.finish()
 

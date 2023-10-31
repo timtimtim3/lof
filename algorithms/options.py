@@ -317,7 +317,6 @@ class MetaPolicyQLearning(MetaPolicy):
         exit_states_idxs = list(map(self.env.states.index, self.env.exit_states))
         self.exit_states_idx = exit_states_idxs
 
-
         for subgoal in env.exit_states:
 
             option = OptionQLearning(self.env, subgoal, self.gamma, self.alpha)
