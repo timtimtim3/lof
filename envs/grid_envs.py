@@ -238,20 +238,21 @@ class GridEnv(ABC, gym.Env):
     def custom_render(self, square_map: dict[tuple[int, int]]):
         pass
 
+
 class Delivery(GridEnv):
     
     MAP = np.array([['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', 'C', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
+                    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
+                    [' ', 'A', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
-                    ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O',' O', 'B', 'O', 'O', 'O' ],
+                    [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ','  ', 'B', ' ', ' ', ' ' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],
                     ['O', 'O', 'O', ' ', 'O', 'O', 'O', 'H', 'O', 'O', 'O', ' ', 'O', 'O', 'O' ],])
@@ -274,7 +275,7 @@ class Delivery(GridEnv):
 
         for c in range(self.width):
             for r in range(self.height):
-                if self.MAP[r, c] == 'O':
+                if self.MAP[r, c] == 'X':
                     self.obstacles.append((r, c))
 
         self.exit_states = len(self.object_ids) * [None]
@@ -335,7 +336,7 @@ class Delivery(GridEnv):
             y, x = s1
             object_index = self.all_objects[self.MAP[y, x]]
             phi[object_index] = 1.
-        elif self.MAP[s1] == 'X':
+        elif self.MAP[s1] == 'O':
             phi[:] = -100
         
         return phi
