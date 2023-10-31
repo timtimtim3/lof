@@ -61,16 +61,11 @@ class OptionVI(OptionBase):
                 all_ns = []
 
                 if sidx == goal_idx:
-                    To[goal_idx, goal_idx] = 1 
                     continue
 
                 for aidx in range(self.a_dim):
 
                     q_value = 0
-                    p = prob = self.env.P[sidx, aidx, :]
-
-                    terms = np.ones(self.s_dim)
-                    terms[goal_idx] = 0
 
                     for nsidx in range(self.s_dim):
                        
@@ -78,7 +73,6 @@ class OptionVI(OptionBase):
                         if not prob:
                             continue
                         all_ns.append(nsidx)
-
                         done = nsidx == goal_idx
 
                         q_value += prob * (self.env.reward(self.states[sidx]) + (1-done) * self.gamma * V[nsidx]) 
@@ -266,7 +260,6 @@ class MetaPolicy(ABC):
         return success, acc_reward
 
 # ANCHOR: metapolicy
-
 class MetaPolicyVI(MetaPolicy):
 
     def __init__(self, env, eval_env, fsa, T, gamma=1., num_iters = 50, writer=None):
@@ -290,6 +283,7 @@ class MetaPolicyVI(MetaPolicy):
         options = []
 
         for i, exit_state in enumerate(self.env.exit_states):
+
             option = OptionVI(self.env, exit_state, self.gamma)
             num_iters = option.train()
 

@@ -27,6 +27,7 @@ def fsa_delivery1(env):
     
     T = np.zeros((len(fsa.states), len(fsa.states), env.s_dim))
 
+
     T[0, 0, :] = 1
     T[0, 0, obstacles_idxs] = 0
     T[0, 0, exit_states_idxs[0]] = 0
