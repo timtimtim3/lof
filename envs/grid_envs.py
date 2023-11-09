@@ -57,6 +57,11 @@ class GridEnv(ABC, gym.Env):
                     if add_obj_to_start:
                         self.initial.append((r, c))
 
+        self.exit_states = len(self.object_ids) * [None]
+        for s in self.object_ids:
+            symbol = self.MAP[s]
+            self.exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
+
         self.w = np.zeros(self.feat_dim)
         self.action_space = Discrete(4)
         self.observation_space = Box(low=np.zeros(
@@ -71,6 +76,8 @@ class GridEnv(ABC, gym.Env):
         idx = 0
         for i in range(0, self.MAP.shape[0]):
             for j in range(0, self.MAP.shape[1]):
+                if self.MAP[i][j] == "X":
+                    continue
                 self.states.append((i, j))
 
     @abstractmethod
@@ -238,6 +245,19 @@ class GridEnv(ABC, gym.Env):
     def custom_render(self, square_map: dict[tuple[int, int]]):
         pass
 
+    @abstractmethod
+    def reward(self, state):
+        raise NotImplementedError
+
+    def _make_rewards(self):
+
+        rewards = np.zeros(self.s_dim)
+
+        for i, s in enumerate(self.states):
+            rewards[i] = self.reward(s)
+
+        return rewards
+
 
 class Delivery(GridEnv):
     
@@ -278,22 +298,7 @@ class Delivery(GridEnv):
                 if self.MAP[r, c] == 'X':
                     self.obstacles.append((r, c))
 
-        self.exit_states = len(self.object_ids) * [None]
-        for s in self.object_ids:
-            symbol = self.MAP[s]
-            self.exit_states[self.PHI_OBJ_TYPES.index(symbol)] = s
-
         self.rewards = self._make_rewards()
-
-    def _make_rewards(self):
-
-        rewards = np.zeros(self.s_dim)
-
-        for i, s in enumerate(self.states):
-            rewards[i] = self.reward(s)
-
-        return rewards
-    
 
     def _create_transition_function(self):
         self._create_transition_function_base()
