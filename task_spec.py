@@ -1,12 +1,20 @@
-from algorithms.tasks import *  
+from algorithms.tasks import *
+import networkx as nx
+from matplotlib import pyplot as plt
 
 def load_fsa(name: str, env):    
 
     if name == "delivery_task1":
-        return fsa_delivery1(env)
+        init_fun = fsa_delivery1
     elif name == "delivery_task2":
-        return fsa_delivery2(env)
+        init_fun = fsa_delivery2
     elif name == "office_task1":
-        return fsa_office1(env)
+        init_fun = fsa_office1
+    elif name == "double_slit_task1":
+        init_fun = fsa_double_slit1
     else:
         raise NameError()
+    g = init_fun(env)
+    nx.draw(g[0].graph, with_labels=True)
+    plt.savefig("test.png")
+    return g
