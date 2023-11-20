@@ -3,23 +3,28 @@ import numpy as np
 
 
 def fsa_double_slit1(env):
-    symbols_to_phi = {"O1": [0],
-                      "O2": [1],}
 
+    symbols_to_phi = {"O1": [0], 
+                      "O2": [1],}
+    
     fsa = FiniteStateAutomaton(symbols_to_phi)
 
     fsa.add_state("u0")
     fsa.add_state("u1")
-    fsa.add_transition("u0", "u1", "O1")
-    fsa.add_transition("u0", "u1", "O2")
 
-    exit_states_idxs = list(map(lambda x: env.states.index(x), env.exit_states))
+    fsa.add_transition("u0", "u1", "O1 v O22")
+
+    exit_states_idxs = list(map(lambda x: env.states.index(x), env.exit_states)) 
+
     T = np.zeros((len(fsa.states), len(fsa.states), env.s_dim))
 
+    # This is from u0 to u1 (via any coffee) or u2 (via any mail)
     T[0, 0, :] = 1
+
+    # If it goes to an office or mail location, it transitions to a new F-state 
     T[0, 0, exit_states_idxs[0]] = 0
-    T[0, 1, exit_states_idxs[0]] = 1
     T[0, 0, exit_states_idxs[1]] = 0
+    T[0, 1, exit_states_idxs[0]] = 1
     T[0, 1, exit_states_idxs[1]] = 1
 
     T[1, 1, :] = 1
@@ -198,8 +203,8 @@ def fsa_office1(env):
 
     return fsa, T
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
 
     fsa, _ = fsa_office1()
 
