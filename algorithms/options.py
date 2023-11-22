@@ -155,7 +155,7 @@ class MetaPolicy(ABC):
         pkl.dump(self.mu, open(os.path.join(path,"metapolicy.pkl"), "wb"))
     
 
-    def train_metapolicy(self, record=False):
+    def train_metapolicy(self, record=False, iters = None):
 
         Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
         V = np.zeros((len(self.fsa.states), self.env.s_dim))
@@ -166,6 +166,8 @@ class MetaPolicy(ABC):
         R[np.where(terminals)] = 0
 
         times = [0]
+
+        num_iters = self.num_iters if iters is None else iters
 
         for j in range(self.num_iters):
 
@@ -241,7 +243,7 @@ class MetaPolicy(ABC):
             steps_in_option = 0
             done = False
 
-            while steps_in_option < max_steps_option and old_f_state == f_state:
+            while steps_in_option < max_steps_option and state != self.options[option].subgoal_state:
 
                 action = self.options[option].Q[self.env.states.index(state)].argmax()
                 (f_state, state), reward, done, _ = self.eval_env.step(action)
