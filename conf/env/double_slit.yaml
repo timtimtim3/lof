@@ -1,8 +1,8 @@
 defaults:
   - grid_env
 
-gym_name: DoubleSlit-v0
-eval_name: DoubleSlitEval-v0
+gym_name: DoubleSlit-v1
+eval_name: DoubleSlitEval-v1
 add_obj_to_start: False
 eval_env:
   _target_: envs.wrappers.GridAutomatonEnv

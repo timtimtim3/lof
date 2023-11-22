@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import time
 import pickle as pkl
 import os
+from time import sleep
 
 def __init__():
     pass
@@ -225,7 +226,7 @@ class MetaPolicy(ABC):
         self.mu = mu
         return mu
     
-    def evaluate_metapolicy(self, policy, max_steps=100, max_steps_option=30):
+    def evaluate_metapolicy(self, policy, max_steps=100, max_steps_option=40):
 
         acc_reward, success = 0, False
         num_steps = 0
@@ -234,6 +235,7 @@ class MetaPolicy(ABC):
 
         options_used = 0
 
+        # print("Init:")
         while num_steps < max_steps:
 
             option = policy[(f_state, state)]
@@ -246,8 +248,13 @@ class MetaPolicy(ABC):
             while steps_in_option < max_steps_option and state != self.options[option].subgoal_state:
 
                 action = self.options[option].Q[self.env.states.index(state)].argmax()
+
+                # print(f"State: {state}, Option: {option}, Action: {action}")
+                sleep(0.1)
+
                 (f_state, state), reward, done, _ = self.eval_env.step(action)
 
+                
                 num_steps+=1
                 acc_reward += reward
                 steps_in_option+=1

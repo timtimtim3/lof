@@ -488,17 +488,18 @@ class DoubleSlit(GridEnv):
     PHI_OBJ_TYPES = ['O1', 'O2']
     UP, RIGHT, DOWN = 0, 1, 2
 
-    def __init__(self, random_act_prob=0.0, add_obj_to_start=False, max_wind=1):
+    def __init__(self, random_act_prob=0.0, add_obj_to_start=False, init_state=None, max_wind=1):
         """
         Creates a new instance of the coffee environment.
 
         """
-        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob)
+        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob, init_state=init_state)
         self.action_space = Discrete(3)
         self._max_wind = max_wind
         self._create_coord_mapping()
         self._create_transition_function()
         self.rewards = self._make_rewards()
+        
 
     def coords_act_transition_distr(self, coords, action):
         row, col = coords

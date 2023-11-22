@@ -7,9 +7,25 @@ gym.envs.register(
 )
 
 gym.envs.register(
+    id='DoubleSlit-v1',
+    entry_point='envs.grid_envs:DoubleSlit',
+    max_episode_steps=1000,
+     kwargs={'max_wind': 1},
+)
+
+gym.envs.register(
     id='DoubleSlitEval-v0',
     entry_point='envs.grid_envs:DoubleSlit',
     max_episode_steps=1000,
+    kwargs={'init_state': (10, 0), 'max_wind': 1},
+)
+
+gym.envs.register(
+    id='DoubleSlitEval-v1',
+    entry_point='envs.grid_envs:DoubleSlit',
+    max_episode_steps=1000,
+    kwargs={'init_state': (10, 0), 
+            'max_wind': 3},
 )
 
 
