@@ -133,6 +133,9 @@ class MetaPolicy(ABC):
         self.writer = writer
         self.num_iters = num_iters
 
+        self.Q = None
+        self.V = None
+
     @abstractmethod
     def _learn_options(self):
         raise NotImplementedError 
@@ -158,8 +161,9 @@ class MetaPolicy(ABC):
 
     def train_metapolicy(self, record=False, iters = None):
 
-        Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
-        V = np.zeros((len(self.fsa.states), self.env.s_dim))
+        if self.Q is None and self.V is None:
+            self.Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
+            self.V = np.zeros((len(self.fsa.states), self.env.s_dim))
 
         # FSA rewards (1 everywhere except at terminal)
         R = np.ones(len(self.fsa.states))
@@ -181,19 +185,19 @@ class MetaPolicy(ABC):
 
                 # Eq. 3 LOF paper
                 rewards = R * (np.tile(Ro[:, None], [1, len(self.fsa.states)]) - 1)
-                next_value = np.dot(To, V.T)
+                next_value = np.dot(To, self.V.T)
 
                 preQ = rewards + next_value
 
-                Q[:, :, oidx] = preQ.T
+                self.Q[:, :, oidx] = preQ.T
             
-            V = Q.max(axis=2)
-            preV = np.tile(V[None, ...], (len(self.fsa.states), 1, 1))
+            self.V = self.Q.max(axis=2)
+            preV = np.tile(self.V[None, ...], (len(self.fsa.states), 1, 1))
             # Multiply by T before passing to next iteration (masks value function)
-            V = np.sum(self.T * preV, axis=1)
+            self.V = np.sum(self.T * preV, axis=1)
 
             # For each iteration, evaluate the policy
-            mu_aux = Q.argmax(axis=2)
+            mu_aux = self.Q.argmax(axis=2)
             mu = {}
 
             elapsed_iter = time.time() - iter_start if record else None
@@ -213,10 +217,7 @@ class MetaPolicy(ABC):
                 self.writer.add_scalar("metrics/evaluation/time", np.sum(times), j)
 
 
-        self.Q = Q
-        self.V = V
-
-        mu_aux = Q.argmax(axis=2)
+        mu_aux = self.Q.argmax(axis=2)
         mu = {}
 
         for (fidx, sidx) in np.ndindex(mu_aux.shape):
@@ -370,7 +371,7 @@ class MetaPolicyQLearning(MetaPolicy):
                     self.writer.add_scalar("learning/success", int(success), total_steps)
                     self.writer.add_scalar("learning/reward", reward, total_steps)
                     self.writer.add_scalar("learning/episode", i, total_steps)
-
+            
 
         self.env.reset()
 

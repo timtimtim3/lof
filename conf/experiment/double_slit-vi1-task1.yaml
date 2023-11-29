@@ -1,0 +1,7 @@
+# @package _global_
+defaults:
+  - override /algorithm: vi
+  - override /env: double_slit1
+
+seed: 42
+fsa_name: double_slit_task1
