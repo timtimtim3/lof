@@ -14,7 +14,7 @@ def main(cfg: DictConfig) -> None:
     run = wandb.init(
         config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True),
         entity=cfg.wandb.entity, project=cfg.wandb.project,
-        sync_tensorboard=True, tags=["lof"]
+        sync_tensorboard=True, tags=["lof"], group="lof"
     )
 
     writer = SummaryWriter(f"/tmp/{run.name}")
@@ -36,8 +36,8 @@ def main(cfg: DictConfig) -> None:
     # Load the algorithm and run it
     policy = hydra.utils.call(config=cfg.algorithm, writer=writer, env=env, eval_env=eval_env, fsa=fsa, T=T)
 
-    policy._learn_options()
-    policy.train_metapolicy(record=True)
+    policy.learn_options()
+    policy.train_metapolicy(record=False)
 
     # Create and save options and metapolicy
     os.makedirs(f"results/{run.name}/options")

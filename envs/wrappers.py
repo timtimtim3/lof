@@ -34,17 +34,19 @@ class GridAutomatonEnv(gym.Env):
 
         next_fsa_state_idxs = np.where(self.T[fsa_state_index, :, state_index] == 1)[0]
 
-
         if len(next_fsa_state_idxs) == 0:
-            return (self.fsa_state, state), -100, True, {}
+            return (self.fsa_state, state), -1000, False, {}
         else: 
             next_fsa_state_index = next_fsa_state_idxs.item()
         
         self.fsa_state = self.fsa.states[next_fsa_state_index]
 
-        done = self.fsa.is_terminal(self.fsa_state)
+        obstacle = phi["proposition"] == "O"
+        done = self.fsa.is_terminal(self.fsa_state) or obstacle
 
-        return (self.fsa_state, state), -1, done, {"proposition": phi["proposition"]}
+        reward = -1000 if obstacle else -1
+
+        return (self.fsa_state, state), reward, done, {"proposition": phi["proposition"]}
 
 
 

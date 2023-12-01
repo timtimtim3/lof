@@ -6,8 +6,8 @@ defaults:
 seed: 42
 fsa_name: delivery_task1
 algorithm:
-  alpha: 0.2
+  alpha: 0.5
   epsilon: 0.3
   num_episodes: 800
-  episode_length: 150
+  episode_length: 200
   eval_freq: 500

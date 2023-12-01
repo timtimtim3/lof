@@ -54,8 +54,9 @@ class GridEnv(ABC, gym.Env):
                     self.occupied.add((r, c))
                 elif self.MAP[r, c] in self.PHI_OBJ_TYPES:
                     self.object_ids[(r, c)] = len(self.object_ids)
-                    if add_obj_to_start:
-                        self.initial.append((r, c))
+                
+                if add_obj_to_start:
+                    self.initial.append((r, c))
 
         self.exit_states = len(self.object_ids) * [None]
         for s in self.object_ids:
@@ -114,7 +115,7 @@ class GridEnv(ABC, gym.Env):
         if self.init_state is not None:
             self.state = self.init_state
         else:
-            self.state = random.choice(self.initial)
+            self.state = random.choice(self.states)
         return self.state_to_array(self.state)
     
     def random_reset(self):
@@ -286,7 +287,7 @@ class Delivery(GridEnv):
     [1] Icarte, RT, et al. "Reward Machines: Exploiting Reward Function Structure in Reinforcement Learning".
     """
 
-    def __init__(self, add_obj_to_start=True, random_act_prob=0.0, init_state=None):
+    def __init__(self, add_obj_to_start=False, random_act_prob=0.0, init_state=None):
         super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob, init_state=init_state)
         self._create_coord_mapping()
         self._create_transition_function()
@@ -332,19 +333,6 @@ class Delivery(GridEnv):
 
         return reward
 
-
-    def features(self, state, action, next_state):
-        s1 = next_state
-        nc = self.feat_dim
-        phi = np.zeros(nc, dtype=np.float32)
-        if s1 in self.object_ids:
-            y, x = s1
-            object_index = self.all_objects[self.MAP[y, x]]
-            phi[object_index] = 1.
-        elif self.MAP[s1] == 'O':
-            phi[:] = -100
-        
-        return phi
 
     
     def custom_render(self, square_map: dict[tuple[int, int]]):
