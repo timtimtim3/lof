@@ -7,6 +7,7 @@ import envs
 from task_spec import load_fsa
 from torch.utils.tensorboard import SummaryWriter
 import os
+import numpy as np
 
 @hydra.main(version_base=None, config_path="conf", config_name="default")
 def main(cfg: DictConfig) -> None:
@@ -37,6 +38,7 @@ def main(cfg: DictConfig) -> None:
     policy = hydra.utils.call(config=cfg.algorithm, writer=writer, env=env, eval_env=eval_env, fsa=fsa, T=T)
 
     policy.learn_options()
+
     policy.train_metapolicy(record=False)
 
     # Create and save options and metapolicy

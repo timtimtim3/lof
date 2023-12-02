@@ -57,6 +57,6 @@ gym.envs.register(
 gym.envs.register(
     id='OfficeComplexEval-v0',
     entry_point='envs.grid_envs:OfficeComplex',
-    kwargs={'init_state': (6, 2)},
+    kwargs={'init_state': (10, 2)},
     max_episode_steps=200,
 )
