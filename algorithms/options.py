@@ -227,7 +227,7 @@ class MetaPolicy(ABC):
         self.mu = mu
         return mu
     
-    def evaluate_metapolicy(self, max_steps=200, max_steps_option=40):
+    def evaluate_metapolicy(self, max_steps=200, max_steps_option=40, log=False):
 
         if self.Q is None:
             self.train_metapolicy()
@@ -259,13 +259,16 @@ class MetaPolicy(ABC):
                 qvalues = self.options[option].Q[self.env.states.index(state)]
                 action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
 
+                if log:
+                    print((f_state, state), action, acc_reward)
+
                 (f_state, state), reward, done, info = self.eval_env.step(action)
 
                 num_steps+=1
                 acc_reward += reward
                 steps_in_option+=1
                 
-                if done:
+                if done or num_steps == max_steps:
                     break
 
             if done:

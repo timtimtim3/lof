@@ -49,14 +49,14 @@ gym.envs.register(
 )
 
 gym.envs.register(
-    id='OfficeComplex-v0',
-    entry_point='envs.grid_envs:OfficeComplex',
+    id='Office-v0',
+    entry_point='envs.grid_envs:Office',
     max_episode_steps=200,
 )
 
 gym.envs.register(
-    id='OfficeComplexEval-v0',
-    entry_point='envs.grid_envs:OfficeComplex',
-    kwargs={'init_state': (10, 2)},
+    id='OfficeEval-v0',
+    entry_point='envs.grid_envs:Office',
+    kwargs={'init_state': (9, 2)},
     max_episode_steps=200,
 )

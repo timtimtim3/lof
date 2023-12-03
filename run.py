@@ -41,6 +41,8 @@ def main(cfg: DictConfig) -> None:
 
     policy.train_metapolicy(record=False)
 
+    policy.evaluate_metapolicy(log=True)
+
     # Create and save options and metapolicy
     os.makedirs(f"results/{run.name}/options")
     policy.save(f"results/{run.name}")
