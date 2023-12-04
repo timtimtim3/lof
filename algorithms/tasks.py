@@ -255,12 +255,12 @@ def fsa_office2(env):
     T[2, 2, :] = 1
 
     # If it goes to any coffee location, it transitions to a new F-state 
-    T[2, 3, exit_states_idxs[2]] = 0
-    T[2, 3, exit_states_idxs[3]] = 0
-    T[2, 4, exit_states_idxs[2]] = 1
-    T[2, 4, exit_states_idxs[3]] = 1
+    T[2, 2, exit_states_idxs[2]] = 0
+    T[2, 2, exit_states_idxs[3]] = 0
+    T[2, 3, exit_states_idxs[2]] = 1
+    T[2, 3, exit_states_idxs[3]] = 1
 
-    T[4, 4, :] = 1
+    T[3, 3, :] = 1
 
     return fsa, T
 
