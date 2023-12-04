@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - override /algorithm: qlearning
+  - override /env: office
+
+seed: 100
+fsa_name: office_task2
+algorithm:
+  alpha: 0.2
+  epsilon: 0.3
+  num_episodes: 800
+  episode_length: 200
+  eval_freq: 50
