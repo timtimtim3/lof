@@ -17,7 +17,7 @@ def main(cfg: DictConfig) -> None:
         sync_tensorboard=True, tags=["lof"]
     )
 
-    writer = SummaryWriter(f"/tmp/{run.name}")
+    writer = SummaryWriter(f"{wandb.run.dir}")
 
     # Set seeds
     seed_everything(cfg.seed)
@@ -40,8 +40,8 @@ def main(cfg: DictConfig) -> None:
     policy.train_metapolicy(record=True)
 
     # Create and save options and metapolicy
-    os.makedirs(f"results/{run.name}/options")
-    policy.save(f"results/{run.name}")
+    os.makedirs(f"{wandb.run.dir}/options")
+    policy.save(f"{wandb.run.dir}")
 
     writer.close()
     wandb.finish()
