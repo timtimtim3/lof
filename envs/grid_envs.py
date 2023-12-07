@@ -557,3 +557,96 @@ class DoubleSlit(GridEnv):
             reward = -1000
 
         return reward
+
+def make_ice_corridor_map():
+    SHORT_PATH_LENGTH = 4
+    DETOUR_EXTRA_STEPS = 54
+    assert (DETOUR_EXTRA_STEPS % 2) == 0 # Should be even
+    map = [['X','X','X','X','X','X','X']]
+    map.append(['X',' ','O1','TS','O2',' ','X'])
+    for _ in range(SHORT_PATH_LENGTH - 1):
+        map.append(['X', ' ', 'X', ' ', 'X', ' ', 'X'])
+    map.append(['X', ' ', 'X', '_', 'X', ' ', 'X'])
+    for _ in range((DETOUR_EXTRA_STEPS - 4) // 2):
+        map.append(['X', ' ', 'X', ' ', 'X', ' ', 'X'])
+    map.append(['X', ' ', ' ', ' ', ' ', ' ', 'X'])
+    map.append(['X', 'X', 'X', 'X', 'X', 'X', 'X'])
+    return np.array(map)
+
+
+class IceCorridor(GridEnv):
+    MAP = make_ice_corridor_map()
+    PHI_OBJ_TYPES = ['O1', 'O2']
+
+    def __init__(self, random_act_prob=0.0, add_obj_to_start=False):
+        """
+        Creates a new instance of the coffee environment.
+
+        """
+        super().__init__(add_obj_to_start=add_obj_to_start, random_act_prob=random_act_prob)
+        self.ice_start = list()
+        self.ice_end = list()
+
+        # Add teleport
+        for c in range(self.width):
+            for r in range(self.height):
+                if self.MAP[r, c] == 'TS':
+                    self.ice_start.append((r, c))
+                elif self.MAP[r, c] in {'O1', 'O2'}:
+                    self.ice_end.append((r, c))
+
+        self._create_coord_mapping()
+        self._create_transition_function()
+        self.rewards = self._make_rewards()
+
+    def custom_render(self, square_map: dict[tuple[int, int]]):
+        for square_coords in square_map:
+            square = square_map[square_coords]
+            # Teleport
+            if self.MAP[square_coords] == 'TS':
+                color = [1, 0, 0]
+            elif self.MAP[square_coords] == '_':
+                color = [0, 1, 0]
+            else:
+                continue
+            square.set_color(*color)
+
+    def _create_transition_function(self):
+        # Basic grid env transitions
+        self. _create_transition_function_base()
+
+        # Specific teleport addition
+        teleport_state = self.states.index(self.ice_start[0])
+        for start_s in range(self.s_dim):
+            for a in range(self.a_dim):
+                if self.P[start_s, a, teleport_state] >= 0:
+                    for i in self.ice_end:
+                        self.P[start_s, a, self.states.index(i)] += 1.0/len(self.object_ids) * self.P[start_s, a, teleport_state]
+                    self.P[start_s, a, teleport_state] = 0
+        for state_coord in self.ice_end:
+            start_s = self.states.index(state_coord)
+            self.P[start_s, :, :] = 0
+            self.P[start_s, :, start_s] = 1
+
+        # sanity check
+        assert np.allclose(np.sum(self.P, axis=2), 1)
+
+    def reward(self, state):
+        if state in self.ice_end:
+            return -np.infty
+        else:
+            return -1
+
+
+if __name__ == '__main__':
+    env = IceCorridor(random_act_prob=0)
+    gamma = 0.99
+    w = np.array([1.0, 0.0])
+
+    for i in range(50):
+        env.reset()
+        while True:
+            state, reward, done, info = env.step(env.action_space.sample())
+            env.render()
+            if done:
+                break
