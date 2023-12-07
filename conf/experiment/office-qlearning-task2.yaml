@@ -4,7 +4,7 @@ defaults:
   - override /env: office
 
 seed: 100
-fsa_name: office_task1
+fsa_name: office_task2
 algorithm:
   alpha: 0.2
   epsilon: 0.3

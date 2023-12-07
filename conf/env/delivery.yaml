@@ -3,6 +3,6 @@ defaults:
 
 gym_name: Delivery-v0
 eval_name: DeliveryEval-v0
-add_obj_to_start: True
+add_obj_to_start: False
 eval_env:
   _target_: envs.wrappers.GridAutomatonEnv

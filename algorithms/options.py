@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import time
 import pickle as pkl
 import os
+from time import sleep
 
 def __init__():
     pass
@@ -132,15 +133,18 @@ class MetaPolicy(ABC):
         self.writer = writer
         self.num_iters = num_iters
 
+        self.Q = None
+        self.V = None
+
     @abstractmethod
-    def _learn_options(self):
+    def learn_options(self):
         raise NotImplementedError 
 
     # def train(self):
     #     raise NotImplementedError 
     
     @abstractmethod
-    def evaluate_metapolicy(self, policy, log=False, max_steps=100, max_steps_option=30):
+    def evaluate_metapolicy(self, policy, log=False, max_steps=200, max_steps_option=25):
         raise NotImplementedError
     
     def save(self, path:str):
@@ -155,10 +159,11 @@ class MetaPolicy(ABC):
         pkl.dump(self.mu, open(os.path.join(path,"metapolicy.pkl"), "wb"))
     
 
-    def train_metapolicy(self, record=False):
+    def train_metapolicy(self, record=False, iters = None):
 
-        Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
-        V = np.zeros((len(self.fsa.states), self.env.s_dim))
+        if self.Q is None and self.V is None:
+            self.Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
+            self.V = np.zeros((len(self.fsa.states), self.env.s_dim))
 
         # FSA rewards (1 everywhere except at terminal)
         R = np.ones(len(self.fsa.states))
@@ -167,7 +172,9 @@ class MetaPolicy(ABC):
 
         times = [0]
 
-        for j in range(self.num_iters):
+        num_iters = self.num_iters if iters is None else iters
+
+        for j in range(num_iters):
 
             iter_start = time.time() if record else None
 
@@ -178,19 +185,19 @@ class MetaPolicy(ABC):
 
                 # Eq. 3 LOF paper
                 rewards = R * (np.tile(Ro[:, None], [1, len(self.fsa.states)]) - 1)
-                next_value = np.dot(To, V.T)
+                next_value = np.dot(To, self.V.T)
 
                 preQ = rewards + next_value
 
-                Q[:, :, oidx] = preQ.T
+                self.Q[:, :, oidx] = preQ.T
             
-            V = Q.max(axis=2)
-            preV = np.tile(V[None, ...], (len(self.fsa.states), 1, 1))
+            self.V = self.Q.max(axis=2)
+            preV = np.tile(self.V[None, ...], (len(self.fsa.states), 1, 1))
             # Multiply by T before passing to next iteration (masks value function)
-            V = np.sum(self.T * preV, axis=1)
+            self.V = np.sum(self.T * preV, axis=1)
 
             # For each iteration, evaluate the policy
-            mu_aux = Q.argmax(axis=2)
+            mu_aux = self.Q.argmax(axis=2)
             mu = {}
 
             elapsed_iter = time.time() - iter_start if record else None
@@ -203,17 +210,14 @@ class MetaPolicy(ABC):
             
             if record:
     
-                success, acc_reward = self.evaluate_metapolicy(mu)
+                success, acc_reward = self.evaluate_metapolicy()
                 self.writer.add_scalar("metrics/evaluation/success", int(success), j)
                 self.writer.add_scalar("metrics/evaluation/acc_reward", acc_reward, j)
                 self.writer.add_scalar("metrics/evaluation/iter", j, j)
                 self.writer.add_scalar("metrics/evaluation/time", np.sum(times), j)
 
 
-        self.Q = Q
-        self.V = V
-
-        mu_aux = Q.argmax(axis=2)
+        mu_aux = self.Q.argmax(axis=2)
         mu = {}
 
         for (fidx, sidx) in np.ndindex(mu_aux.shape):
@@ -223,7 +227,10 @@ class MetaPolicy(ABC):
         self.mu = mu
         return mu
     
-    def evaluate_metapolicy(self, policy, max_steps=100, max_steps_option=30):
+    def evaluate_metapolicy(self, max_steps=200, max_steps_option=40, log=False):
+
+        if self.Q is None:
+            self.train_metapolicy()
 
         acc_reward, success = 0, False
         num_steps = 0
@@ -232,31 +239,46 @@ class MetaPolicy(ABC):
 
         options_used = 0
 
+        # print("Init:")
         while num_steps < max_steps:
 
-            option = policy[(f_state, state)]
+            fidx = self.fsa.states.index(f_state)
+            sidx = self.env.states.index(state)
+
+            qvalues = self.Q[fidx, sidx]
+
+            option = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
             options_used+=1
             
             old_f_state = f_state
             steps_in_option = 0
             done = False
 
-            while steps_in_option < max_steps_option and old_f_state == f_state:
+            while steps_in_option < max_steps_option and state != self.options[option].subgoal_state:
 
-                action = self.options[option].Q[self.env.states.index(state)].argmax()
-                (f_state, state), reward, done, _ = self.eval_env.step(action)
+                qvalues = self.options[option].Q[self.env.states.index(state)]
+                action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
+
+                if log:
+                    print((f_state, state), action, acc_reward)
+
+                (f_state, state), reward, done, info = self.eval_env.step(action)
 
                 num_steps+=1
                 acc_reward += reward
                 steps_in_option+=1
                 
-                if done:
+                if done or num_steps == max_steps:
                     break
 
             if done:
                 success = self.fsa.is_terminal(f_state)
                 break
         
+        self.Q = None
+        self.V = None 
+        self.mu = None
+
         return success, acc_reward
 
 # ANCHOR: metapolicy
@@ -268,13 +290,13 @@ class MetaPolicyVI(MetaPolicy):
         self.num_iters = num_iters
         self.eval_env = eval_env
 
-        self.options = self._learn_options()
+        self.options = self.learn_options()
         self.Q = None 
         self.V = None
         self.mu = None
     
-
-    def _learn_options(self):
+    
+    def learn_options(self):
         
         """
             Automatically learns an option (with ValueIteration) per exit state.
@@ -318,13 +340,17 @@ class MetaPolicyQLearning(MetaPolicy):
 
 
     def get_epsilon_greedy_action(self, option_idx, state):
+        
         if np.random.rand() < self.epsilon:
             return np.random.randint(0, self.env.action_space.n)
         else:
+            
             state_idx = self.options[option_idx].states.index(state)
-            return self.options[option_idx].Q[state_idx, :].argmax()
+            qvalues = self.options[option_idx].Q[state_idx, :]
 
-    def _learn_options(self):
+            return np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
+
+    def learn_options(self):
         
         num_options = len(self.options)
 
@@ -354,18 +380,51 @@ class MetaPolicyQLearning(MetaPolicy):
                 for option in self.options:
                     option.update_qfunction(current_state, action, next_state, r)
 
-                if total_steps % self.eval_freq == 0:
-                    # Log in tensorboard the performance during training
-                    metapolicy = self.train_metapolicy(False)
-                    success, reward = self.evaluate_metapolicy(metapolicy)
-                    self.writer.add_scalar("learning/success", int(success), total_steps)
-                    self.writer.add_scalar("learning/reward", reward, total_steps)
-                    self.writer.add_scalar("learning/episode", i, total_steps)
+                if not self.eval_freq is None:
+                    if total_steps % self.eval_freq == 0:
+                        # Log in tensorboard the performance during training
+                        success, reward = self.evaluate_metapolicy()
+                        self.writer.add_scalar("learning/success", int(success), total_steps)
+                        self.writer.add_scalar("learning/fsa_reward", reward, total_steps)
+                        self.writer.add_scalar("learning/episode", i, total_steps)
+
+            if i % 20 == 0:
+
+                self.evaluate_options(i)
 
 
         self.env.reset()
 
     
+    def evaluate_options(self, num_episode, max_steps = 50):
+        
+        env = self.eval_env.env
+        
+        for i, option in enumerate(self.options):
 
+            obs = tuple(env.reset())
+            acc_reward = 0
+
+            for _ in range(max_steps):
+
+                obs = tuple(obs)
+
+                qvalues = option.Q[env.states.index(obs), :]
+                action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
+
+                obs, reward, _, _ = env.step(action)
+
+                obs = tuple(obs)
+                
+                acc_reward += reward
+
+                if obs == option.subgoal_state:
+                    break
+                
+            
+            self.writer.add_scalar(f"option_learning/option_{i} - acc.reward", acc_reward, num_episode)
+            
+            
+            
     
    

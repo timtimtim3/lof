@@ -10,6 +10,8 @@ def load_fsa(name: str, env):
         init_fun = fsa_delivery2
     elif name == "office_task1":
         init_fun = fsa_office1
+    elif name == "office_task2":
+        init_fun = fsa_office2
     elif name == "double_slit_task1":
         init_fun = fsa_double_slit1
     else:
