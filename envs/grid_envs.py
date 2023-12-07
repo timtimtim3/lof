@@ -50,6 +50,7 @@ class GridEnv(ABC, gym.Env):
             for r in range(self.height):
                 if self.MAP[r, c] == '_':
                     self.initial.append((r, c))
+                    self.init_state = (r,c)
                 elif self.MAP[r, c] == 'X':
                     self.occupied.add((r, c))
                 elif self.MAP[r, c] in self.PHI_OBJ_TYPES:
@@ -673,19 +674,38 @@ class DoubleSlit(GridEnv):
 
         return reward
 
+
 def make_ice_corridor_map():
-    SHORT_PATH_LENGTH = 4
-    DETOUR_EXTRA_STEPS = 54
-    assert (DETOUR_EXTRA_STEPS % 2) == 0 # Should be even
-    map = [['X','X','X','X','X','X','X']]
-    map.append(['X',' ','O1','TS','O2',' ','X'])
+    SHORT_PATH_LENGTH = 2  # From start to slippery
+    CENTRAL_PATH_LENGTH = 1  # From start to top of middle corridor
+    LONG_PATH_LENGTH = 10  # From middle corridor to goal
+    assert (LONG_PATH_LENGTH - SHORT_PATH_LENGTH - CENTRAL_PATH_LENGTH + 4) % 2 == 1  # Should be even
+    WIDTH = LONG_PATH_LENGTH - SHORT_PATH_LENGTH - CENTRAL_PATH_LENGTH + 4
+    MIDDLE_CELL = WIDTH // 2
+
+    border_block = ['X'] * WIDTH
+    common_block = ['X'] * WIDTH
+    common_block[1] = ' '
+    common_block[-2] = ' '
+    common_block[MIDDLE_CELL] = ' '
+    corridor_block = [' '] * WIDTH
+    corridor_block[0] = 'X'
+    corridor_block[-1] = 'X'
+
+
+    map = [border_block.copy()]
+    map.append(corridor_block.copy())
+    map[1][MIDDLE_CELL] = 'TS'
+    map[1][MIDDLE_CELL - 1] = 'O1'
+    map[1][MIDDLE_CELL + 1] = 'O2'
     for _ in range(SHORT_PATH_LENGTH - 1):
-        map.append(['X', ' ', 'X', ' ', 'X', ' ', 'X'])
-    map.append(['X', ' ', 'X', '_', 'X', ' ', 'X'])
-    for _ in range((DETOUR_EXTRA_STEPS - 4) // 2):
-        map.append(['X', ' ', 'X', ' ', 'X', ' ', 'X'])
-    map.append(['X', ' ', ' ', ' ', ' ', ' ', 'X'])
-    map.append(['X', 'X', 'X', 'X', 'X', 'X', 'X'])
+        map.append(common_block.copy())
+    map.append(common_block.copy())
+    map[-1][MIDDLE_CELL] = '_'
+    for _ in range(CENTRAL_PATH_LENGTH - 1):
+        map.append(common_block.copy())
+    map.append(corridor_block.copy())
+    map.append(border_block.copy())
     return np.array(map)
 
 
@@ -735,22 +755,21 @@ class IceCorridor(GridEnv):
         for start_s in range(self.s_dim):
             for a in range(self.a_dim):
                 if self.P[start_s, a, teleport_state] >= 0:
-                    for i in self.ice_end:
-                        self.P[start_s, a, self.states.index(i)] += 1.0/len(self.object_ids) * self.P[start_s, a, teleport_state]
-                    self.P[start_s, a, teleport_state] = 0
-        for state_coord in self.ice_end:
-            start_s = self.states.index(state_coord)
-            self.P[start_s, :, :] = 0
-            self.P[start_s, :, start_s] = 1
+                    if self.states[start_s] in self.ice_end:
+                        self.P[start_s, a, start_s] += self.P[start_s, a, teleport_state]
+                        self.P[start_s, a, teleport_state] = 0
+                    else:
+                        for i in self.ice_end:
+                            self.P[start_s, a, self.states.index(i)] += 1.0/len(self.object_ids) * self.P[start_s, a, teleport_state]
+                        self.P[start_s, a, teleport_state] = 0
 
         # sanity check
         assert np.allclose(np.sum(self.P, axis=2), 1)
 
     def reward(self, state):
-        if state in self.ice_end:
-            return -np.infty
-        else:
-            return -1
+        return -1
+
+
 
 
 if __name__ == '__main__':
