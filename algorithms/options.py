@@ -386,7 +386,7 @@ class MetaPolicyQLearning(MetaPolicy):
                         success, reward = self.evaluate_metapolicy()
                         self.writer.add_scalar("learning/success", int(success), total_steps)
                         self.writer.add_scalar("learning/fsa_reward", reward, total_steps)
-                        self.writer.add_scalar("learning/timestep", total_steps, total_steps)
+                        self.writer.add_scalar("learning_timestep", total_steps, total_steps)
                         self.writer.add_scalar("learning/episode", i, total_steps)
 
             if i % 20 == 0:
