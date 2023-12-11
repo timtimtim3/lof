@@ -1,13 +1,13 @@
 # @package _global_
 defaults:
   - override /algorithm: qlearning
-  - override /env: delivery
+  - override /env: ice_corridor
 
-seed: 42
-fsa_name: delivery_task1
+seed: 100
+fsa_name: ice_corridor_task1
 algorithm:
-  alpha: 0.3
+  alpha: 0.2
   epsilon: 0.3
   num_episodes: 800
   episode_length: 200
-  eval_freq: 500
+  eval_freq: 50

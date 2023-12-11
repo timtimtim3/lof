@@ -225,6 +225,7 @@ class MetaPolicy(ABC):
             mu[(f, s)] = mu_aux[fidx, sidx]
         
         self.mu = mu
+        
         return mu
     
     def evaluate_metapolicy(self, max_steps=200, max_steps_option=40, log=False):
@@ -248,6 +249,7 @@ class MetaPolicy(ABC):
             qvalues = self.Q[fidx, sidx]
 
             option = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
+
             options_used+=1
             
             old_f_state = f_state
@@ -267,6 +269,7 @@ class MetaPolicy(ABC):
                 num_steps+=1
                 acc_reward += reward
                 steps_in_option+=1
+
                 
                 if done or num_steps == max_steps:
                     break
@@ -366,6 +369,11 @@ class MetaPolicyQLearning(MetaPolicy):
             
             num_steps = 0
 
+            if i % 10 == 0:
+
+                print(i, "Episodes")
+
+
             while num_steps  < self.episode_length:
                 
                 num_steps += 1
@@ -384,6 +392,7 @@ class MetaPolicyQLearning(MetaPolicy):
                     if total_steps % self.eval_freq == 0:
                         # Log in tensorboard the performance during training
                         success, reward = self.evaluate_metapolicy()
+
                         self.writer.add_scalar("learning/success", int(success), total_steps)
                         self.writer.add_scalar("learning/fsa_reward", reward, total_steps)
                         self.writer.add_scalar("learning_timestep", total_steps, total_steps)

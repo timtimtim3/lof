@@ -4,7 +4,7 @@ defaults:
   - override /env: delivery
 
 seed: 42
-fsa_name: delivery_task1
+fsa_name: delivery_task3
 algorithm:
   alpha: 0.3
   epsilon: 0.3
