@@ -143,10 +143,6 @@ class MetaPolicy(ABC):
     # def train(self):
     #     raise NotImplementedError 
     
-    @abstractmethod
-    def evaluate_metapolicy(self, policy, log=False, max_steps=200, max_steps_option=25):
-        raise NotImplementedError
-    
     def save(self, path:str):
         
         for i, option in enumerate(self.options):
@@ -228,7 +224,7 @@ class MetaPolicy(ABC):
         
         return mu
     
-    def evaluate_metapolicy(self, max_steps=200, max_steps_option=40, log=False):
+    def evaluate_metapolicy(self, max_steps=200, max_steps_option=40, log=False, reset=True):
 
         if self.Q is None:
             self.train_metapolicy()
@@ -256,13 +252,15 @@ class MetaPolicy(ABC):
             steps_in_option = 0
             done = False
 
-            while steps_in_option < max_steps_option and state != self.options[option].subgoal_state:
+            first = True
+
+            while (steps_in_option < max_steps_option and state != self.options[option].subgoal_state) or first:
 
                 qvalues = self.options[option].Q[self.env.states.index(state)]
                 action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
 
                 if log:
-                    print((f_state, state), action, acc_reward)
+                    print(option, (f_state, state), action, acc_reward, qvalues, self.env.states.index(state))
 
                 (f_state, state), reward, done, info = self.eval_env.step(action)
 
@@ -270,17 +268,22 @@ class MetaPolicy(ABC):
                 acc_reward += reward
                 steps_in_option+=1
 
-                
                 if done or num_steps == max_steps:
+                    if log:
+                        print("Done at", (f_state, state), acc_reward)
                     break
+
+                if num_steps > 0:
+                    first = False
 
             if done:
                 success = self.fsa.is_terminal(f_state)
                 break
         
-        self.Q = None
-        self.V = None 
-        self.mu = None
+        if reset:
+            self.Q = None
+            self.V = None 
+            self.mu = None
 
         return success, acc_reward
 
@@ -314,7 +317,7 @@ class MetaPolicyVI(MetaPolicy):
 
             options.append(option)
 
-            self.writer.add_scalar(f"options/option{i}", num_iters)
+            # self.writer.add_scalar(f"options/option{i}", num_iters)
 
         return options
 

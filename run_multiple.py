@@ -6,9 +6,13 @@ import envs
 from task_spec import load_fsa
 import os, argparse
 import pickle as pkl
+import itertools
+import pandas as pd
 
-from algorithms.options import MetaPolicyQLearning, OptionBase
+from algorithms.options import MetaPolicyVI, OptionBase
 
+import matplotlib.pyplot as plt
+import numpy as np
 
 def read_file(filepath):
     
@@ -20,24 +24,22 @@ def read_file(filepath):
 def main() -> None:
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_iters", type=int, default=50)
-    parser.add_argument("--task", type=str, default="task1")
     parser.add_argument("--run_name", type=str)
+    parser.add_argument("--fsa_prefix", type=str)
     parser.add_argument("--seed", type=int, default=42)
+
+    MAX_ITERS = 50
 
 
     args = parser.parse_args()
-    num_iters = args.num_iters
-    task = args.task
     run_name = args.run_name
+    fsa_prefix = args.fsa_prefix
     seed = args.seed
 
     seed_everything(seed)
 
-
     # Init wandb
     newconfig = {
-        "num_iters": num_iters,
         "options_run_name": run_name,
     }
 
@@ -57,44 +59,52 @@ def main() -> None:
 
     env_cfg = config.pop("env")
 
+
     env_name = env_cfg.pop("gym_name")
     eval_name = env_cfg.pop("eval_name")
     env = gym.make(env_name)
     eval_env = gym.make(eval_name)
-    fsa, T = load_fsa(config.pop("fsa_name"), env)
-
-    eval_env = hydra.utils.call(config=env_cfg.pop("eval_env"), env=eval_env, fsa=fsa, fsa_init_state="u0", T=T)   
+    eval_env_target = config=env_cfg.pop("eval_env")
 
     # Retrieve pre-computed options
-    dir = os.path.join("results", run_name)
 
-    metapolicy = os.path.join(dir, "metapolicy.pkl")
-    Q =  os.path.join(dir, "Q.pkl")
+    all_p_reward, all_p_success = [], []
+   
+    tasks = [f"{fsa_prefix}{i}" for i in range(1, 4)]
+       
+    for t in tasks:
 
-    options = []
+        res_acc_reward, res_success = [], []
     
-    options_dir = os.path.join("results", run_name, "options")
+        fsa, T = load_fsa(t, env)
+        fsa_env = hydra.utils.call(eval_env_target, env=eval_env, fsa=fsa, fsa_init_state="u0", T=T)
 
-    for (option, subgoal) in zip(os.listdir(options_dir), env.exit_states):
-        o = OptionBase(env, subgoal, gamma=1)
-        o.Q = read_file(os.path.join(options_dir, option, "Q.pkl"))
-        o.Ro = read_file(os.path.join(options_dir, option, "Ro.pkl"))
-        o.To = read_file(os.path.join(options_dir, option, "To.pkl"))
-        options.append(o)
+        mp = MetaPolicyVI(env, fsa_env, fsa, T)
+        print(t, "options learned.")
 
-    mp = MetaPolicyQLearning(env, eval_env, fsa, T)
-    mp.options = options
-
-    for i in range(50):
-
-        mp.train_metapolicy(record=False, iters = 1)
-        success, acc_reward = mp.evaluate_metapolicy(mp.mu)
+        for i in range(50):
+            print(t, i)
+            mp.train_metapolicy(iters = 1)
+            success, acc_reward = mp.evaluate_metapolicy(reset=False)
+            res_acc_reward.append(acc_reward)
+            res_success.append(success)
+        
+        all_p_reward.append(res_acc_reward)
+        all_p_success.append(all_p_success)
 
     #     run.log({ 'metrics/evaluation/acc_reward': acc_reward,
     #               'metrics/evaluation/success': success,
     #               'metrics/evaluation/iter': i})
-
     # wandb.finish()
+
+
+    rewards = np.vstack(all_p_reward)
+
+    df = pd.DataFrame({'iter': list(range(50)),
+                        'mean': rewards.mean(axis=0),
+                        'std': rewards.std(axis=0)})
+
+    df.to_csv("LOF-Office-redapt.csv")
 
 if __name__ == "__main__":
     main()
