@@ -5,8 +5,9 @@ defaults:
 
 seed: 100
 fsa_name: office_task1
+
 algorithm:
-  alpha: 0.2
+  lr: 0.2
   epsilon: 0.3
   num_episodes: 800
   episode_length: 200
