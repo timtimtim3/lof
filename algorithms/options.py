@@ -244,7 +244,7 @@ class MetaPolicy(ABC):
 
                 wb.log({"metrics/evaluation/success": int(success)}, step = j)
                 wb.log({"metrics/evaluation/acc_reward": acc_reward}, step = j)
-                wb.log({"metrics/evaluation/iter": j}, sstep = j)
+                wb.log({"metrics/evaluation/iter": j}, step = j)
                 wb.log({"metrics/evaluation/time": np.sum(times)}, step = j)
 
 
@@ -357,7 +357,7 @@ class MetaPolicyVI(MetaPolicy):
 
         options = []
 
-        for i, exit_state in enumerate(self.env.exit_states):
+        for i, exit_state in enumerate(self.env.exit_states.values()):
 
             option = OptionVI(self.env, exit_state, self.gamma)
             num_iters = option.train()
@@ -394,10 +394,10 @@ class MetaPolicyQLearning(MetaPolicy):
         self.eval_episodes = eval_episodes
         self.log = log
 
-        exit_states_idxs = list(map(self.env.states.index, self.env.exit_states))
+        exit_states_idxs = list(map(self.env.states.index, self.env.exit_states.values()))
         self.exit_states_idx = exit_states_idxs
 
-        for subgoal in env.exit_states:
+        for subgoal in env.exit_states.values():
 
             subgoal_idx = self.env.states.index(subgoal)
 
