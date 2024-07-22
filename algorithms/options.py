@@ -5,7 +5,10 @@ import pickle as pkl
 import os
 import wandb as wb
 from typing import List, Optional
-from .fsa import FiniteStateAutomaton
+
+import sys 
+sys.path.append('..')
+from fsa import FiniteStateAutomaton
 
 class OptionBase(ABC):
 
