@@ -1,8 +1,0 @@
-defaults:
-  - grid_env
-
-gym_name: Office-v0
-eval_name: OfficeEval-v0
-add_obj_to_start: True
-eval_env:
-  _target_: envs.wrappers.GridAutomatonEnv
