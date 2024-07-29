@@ -1,13 +1,13 @@
-import numpy as np
-from abc import ABC, abstractmethod
-import time
-import pickle as pkl
-import os
-import wandb as wb
-from typing import List, Optional
-from time import sleep
-
 from fsa.fsa import FiniteStateAutomaton
+from abc import ABC, abstractmethod
+from typing import Optional
+
+import pickle as pkl
+import numpy as np
+import wandb as wb
+import time
+import os
+
 
 class OptionBase(ABC):
 
@@ -268,7 +268,7 @@ class MetaPolicy(ABC):
         
         if record:
 
-            success, acc_reward = self.evaluate_metapolicy(reset=False, log = True)
+            success, acc_reward = self.evaluate_metapolicy(reset=False)
 
         mu_aux = self.Q.argmax(axis=2)
         mu = {}
@@ -317,9 +317,6 @@ class MetaPolicy(ABC):
                 qvalues = self.options[option].Q[self.env.coords_to_state[state]]
                 action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
 
-                if log:
-                    print(f_state, state, action, num_steps, p)
-
                 (f_state, state), reward, done, info = self.eval_env.step(action)
 
                 p = info["proposition"]
@@ -329,8 +326,6 @@ class MetaPolicy(ABC):
                 steps_in_option+=1
 
                 if done or num_steps == max_steps:
-                    if log:
-                        print("Done at", (f_state, state), acc_reward)
                     break
 
                 first = False
@@ -545,10 +540,8 @@ class MetaPolicyQLearning(MetaPolicy):
 
 
     def define_wb_metrics_option(sefl, option_idx):
-        wb.log(f"option_learning/option_{option_idx}/acc.reward", step_metric = "option_learning/option_{option_idx}/acc.reward")
-        wb.log(f"option_learning/option_{option_idx}/epsilon", step_metric = "option_learning/option_{option_idx}/acc.reward")
-        wb.log(f"option_learning/option_{option_idx}/num_steps", step_metric = "option_learning/option_{option_idx}/acc.reward")
-        wb.log(f"option_learning/option_{option_idx}/acc.reward")
+        wb.define_metric(f"option_learning/option_{option_idx}/acc.reward", step_metric = f"option_learning/option_{option_idx}/num_steps")
+        wb.define_metric(f"option_learning/option_{option_idx}/epsilon", step_metric = f"option_learning/option_{option_idx}/num_steps")
       
             
             
