@@ -342,19 +342,12 @@ class MetaPolicy(ABC):
                     
         if reset:
             
-            if not i is None:
-                error = np.abs(self.gt_V - self.V).mean()
-                log_dict = {"learning/error": error, 
-                            "learning/timestep" : num_steps}
-                
-                wb.log(log_dict)
-
             self.Q  = None
             self.V  = None 
             self.mu = None
         
-
         return success, acc_reward
+    
 
 # ANCHOR: metapolicy
 class MetaPolicyVI(MetaPolicy):
@@ -433,11 +426,12 @@ class MetaPolicyQLearning(MetaPolicy):
         exit_states_idxs = list(map(lambda x: self.env.coords_to_state[x], self.env.exit_states.values()))
         self.exit_states_idxs = exit_states_idxs
 
-        for subgoal_idx in self.exit_states_idxs:
+        self.define_wb_metrics()
 
+        for option_idx, subgoal_idx in enumerate(self.exit_states_idxs):
+            self.define_wb_metrics_option(option_idx)
             option = OptionQLearning(self.env, subgoal_idx, self.gamma, self.lr, init_epsilon, final_epsilon, warmup_steps, learning_steps)
             self.options.append(option)
-
 
     def get_epsilon_greedy_action(self, 
                                   option_idx : int, 
@@ -495,8 +489,6 @@ class MetaPolicyQLearning(MetaPolicy):
                 for oidx, option in enumerate(self.options):
                     res = option.update_qfunction(current_state, action, next_state, r)
 
-
-
                 if not self.eval_freq is None and total_steps % self.eval_freq == 0:
                     # Log the performance during training
                     success, reward = self.evaluate_metapolicy(i=num_steps)
@@ -513,29 +505,11 @@ class MetaPolicyQLearning(MetaPolicy):
 
                     self.evaluate_options(total_steps)
 
-                    if not hasattr(self, "gt_options"):
-                        continue
-                    
-                    log_dict = {"learning/timestep" : num_steps}
-
-                    for idx in range(len(self.options)):
-
-                        optiongt = self.gt_options[idx]
-                        option = self.options[idx]
-
-                        error = np.abs(optiongt.Q.max(axis=1) - option.Q.max(axis=1)).mean()
-
-                        log_dict[f"option_learning/option_{idx}/error"] = error
-
-                    wb.log(log_dict)
-                        
-
-
         self.env.reset()
 
     
     def evaluate_options(self, 
-                         num_episode : int, 
+                         num_step : int, 
                          max_steps : Optional[int]= 50):
         
         env = self.eval_env.env
@@ -561,7 +535,21 @@ class MetaPolicyQLearning(MetaPolicy):
                 if obs == option.subgoal_state:
                     break
             
-            wb.log({f"option_learning/option_{i}/acc.reward": acc_reward, "learning/episode" : num_episode})
+            wb.log({f"option_learning/option_{i}/acc.reward": acc_reward, "learning/timestep" : num_step})
+
+    def define_wb_metrics(self):
+        wb.define_metric(f"learning/success", step_metric="learning/timestep")
+        wb.define_metric(f"learning/fsa_reward", step_metric="learning/timestep")
+        wb.define_metric(f"learning/episode", step_metric="learning/timestep")
+        wb.define_metric(f"learning/timestep")
+
+
+    def define_wb_metrics_option(sefl, option_idx):
+        wb.log(f"option_learning/option_{option_idx}/acc.reward", step_metric = "option_learning/option_{option_idx}/acc.reward")
+        wb.log(f"option_learning/option_{option_idx}/epsilon", step_metric = "option_learning/option_{option_idx}/acc.reward")
+        wb.log(f"option_learning/option_{option_idx}/num_steps", step_metric = "option_learning/option_{option_idx}/acc.reward")
+        wb.log(f"option_learning/option_{option_idx}/acc.reward")
+      
             
             
             
