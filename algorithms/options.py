@@ -31,7 +31,18 @@ class OptionBase(ABC):
         pkl.dump(self.Q, open(os.path.join(f"{path}", "Q.pkl"), "wb"))
         pkl.dump(self.Ro, open(os.path.join(f"{path}", "Ro.pkl"), "wb"))
         pkl.dump(self.To, open(os.path.join(f"{path}", "To.pkl"), "wb"))
-    
+
+    @classmethod
+    def load(cls, env, subgoal_index: int, gamma: float, path: str):
+        """
+        Instantiate an OptionBase (or subclass) and fill Q, Ro, To from disk.
+        """
+        # note: cls will be OptionVI or OptionQLearning
+        opt = cls(env, subgoal_index, gamma)
+        opt.Q  = pkl.load(open(os.path.join(path, "Q.pkl"),  "rb"))
+        opt.Ro = pkl.load(open(os.path.join(path, "Ro.pkl"), "rb"))
+        opt.To = pkl.load(open(os.path.join(path, "To.pkl"), "rb"))
+        return opt
 
 class OptionVI(OptionBase):
 
@@ -190,7 +201,43 @@ class MetaPolicy(ABC):
     
         pkl.dump(self.Q, open(os.path.join(path,"Q.pkl"), "wb"))
         pkl.dump(self.mu, open(os.path.join(path,"metapolicy.pkl"), "wb"))
-    
+
+    @classmethod
+    def load(cls,
+             env,
+             eval_env,
+             fsa: FiniteStateAutomaton,
+             T: np.ndarray,
+             base_dir: str,
+             gamma: float,
+             eval_episodes: int = 1,
+             num_iters: int = 50):
+        """
+        Instantiate a MetaPolicy subclass and rehydrate its options, Q, and mu.
+        """
+        # 1) Make the empty container
+        inst = cls(env, eval_env, fsa, T, gamma, num_iters, eval_episodes)
+
+        # 2) Load each option in order
+        options = []
+        opts_dir = os.path.join(base_dir, "options")
+        # assume folders option0, option1, …, optionN
+        for name in sorted(os.listdir(opts_dir)):
+            if not name.startswith("option"):
+                continue
+            idx = int(name.replace("option", ""))
+            subpath = os.path.join(opts_dir, name)
+            # the subgoal_index must match how you originally built them:
+            subgoal_state = env.exit_states[idx]
+            subgoal_idx = env.coords_to_state[subgoal_state]
+            option = OptionBase.load(env, subgoal_idx, gamma, subpath)
+            options.append(option)
+        inst.options = options
+
+        # 3) Load the meta‐Q and mu
+        inst.Q  = pkl.load(open(os.path.join(base_dir, "Q.pkl"),         "rb"))
+        inst.mu = pkl.load(open(os.path.join(base_dir, "metapolicy.pkl"), "rb"))
+        return inst
 
     def train_metapolicy(self, 
                          record: bool = False,
@@ -351,7 +398,8 @@ class MetaPolicyVI(MetaPolicy):
                  fsa: FiniteStateAutomaton, 
                  T: np.ndarray, 
                  gamma: Optional[float] = 1 , 
-                 num_iters: Optional[int] = 50):
+                 num_iters: Optional[int] = 50,
+                 eval_episodes: Optional[int] = 1):
         
         super().__init__(env, eval_env, fsa, T, gamma, num_iters)
 
