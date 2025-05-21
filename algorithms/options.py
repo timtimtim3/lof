@@ -596,6 +596,9 @@ class MetaPolicyQLearning(MetaPolicy):
                 _, r, _, _ = self.env.step(action)
                 next_state = self.env.state
 
+                if r != -1:
+                    print('reward:', r)
+
                 # Intra option learning
                 for oidx, option in enumerate(self.options):
                     res = option.update_qfunction(current_state, action, next_state, r)
