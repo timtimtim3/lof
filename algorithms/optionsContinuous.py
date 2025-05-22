@@ -479,14 +479,11 @@ class OptionDQN(RLAlgorithm):
             'optimizer': self.optimizer.state_dict(),
         }, path)
 
-    @classmethod
-    def load(cls, env, subgoal_cells: set, path: str, option_id: int, **init_kwargs):
-        agent = cls(env, subgoal_cells, option_id, **init_kwargs)
+    def load(self, path: str, option_id: int):
         data = th.load(os.path.join(path, f"dqn_option{option_id}.pt"))
-        agent.q_net.load_state_dict(data['q_state'])
-        agent.target_q_net.load_state_dict(data['target_q_state'])
-        agent.optimizer.load_state_dict(data['optimizer'])
-        return agent
+        self.q_net.load_state_dict(data['q_state'])
+        self.target_q_net.load_state_dict(data['target_q_state'])
+        self.optimizer.load_state_dict(data['optimizer'])
 
     def get_arrow_data(self, batch_size: int = 256):
         """
@@ -566,49 +563,6 @@ class MetaPolicyContinuous(ABC):
 
         pkl.dump(self.Q, open(os.path.join(path, "Q.pkl"), "wb"))
         pkl.dump(self.mu, open(os.path.join(path, "metapolicy.pkl"), "wb"))
-
-    @classmethod
-    def load(cls,
-             env,
-             eval_env,
-             fsa: FiniteStateAutomaton,
-             T: np.ndarray,
-             base_dir: str,
-             gamma: float,
-             eval_episodes: int = 1,
-             num_iters: int = 50):
-        """
-        Instantiate a MetaPolicy subclass and rehydrate its options, Q, and mu.
-        """
-        # 1) Make the empty container
-        inst = cls(env, eval_env, fsa, T, gamma, num_iters, eval_episodes)
-
-        # 2) Load each option in order
-        options = []
-        opts_dir = os.path.join(base_dir, "options")
-        # assume folders option0, option1, …, optionN
-        for name in sorted(os.listdir(opts_dir)):
-            if not name.startswith("option") or ".png" in name:
-                continue
-            idx = int(name.replace("option", ""))
-            subpath = os.path.join(opts_dir, name)
-            # the subgoal_index must match how you originally built them:
-            subgoal_state = env.exit_states[idx]
-            subgoal_idx = env.coords_to_state[subgoal_state]
-
-            # env,
-            # subgoal_cells: set,
-            # option_id: int,
-            # meta,
-
-            option = DQN.load(env, subgoal_idx, gamma, subpath)
-            options.append(option)
-        inst.options = options
-
-        # 3) Load the meta‐Q and mu
-        inst.Q = pkl.load(open(os.path.join(base_dir, "Q.pkl"), "rb"))
-        inst.mu = pkl.load(open(os.path.join(base_dir, "metapolicy.pkl"), "rb"))
-        return inst
 
     def train_metapolicy(self,
                          record: bool = False,
@@ -759,6 +713,25 @@ class MetaPolicyContinuous(ABC):
 
         return success, acc_reward
 
+    def load(self, base_dir: str):
+        """
+        Instantiate a MetaPolicy subclass and rehydrate its options, Q, and mu.
+        """
+        opts_dir = os.path.join(base_dir, "options")
+        # assume folders option0, option1, …, optionN
+        for name in sorted(os.listdir(opts_dir)):
+            if not name.startswith("option") or ".png" in name:
+                continue
+            idx = int(name.replace("option", ""))
+            subpath = os.path.join(opts_dir, name)
+
+            option = self.options[idx]
+            option.load(path=subpath, option_id=idx)
+
+        # 3) Load the meta‐Q and mu
+        self.Q = pkl.load(open(os.path.join(base_dir, "Q.pkl"), "rb"))
+        self.mu = pkl.load(open(os.path.join(base_dir, "metapolicy.pkl"), "rb"))
+
     def plot_q_vals(self, activation_data=None, base_dir: Optional[str] = None, show: bool = True,
                     policy_id: Optional[int] = None):
         """
@@ -772,20 +745,19 @@ class MetaPolicyContinuous(ABC):
             policy_id:       index of a single option to plot; if None, plots all.
         """
         # Helper to plot one option
-        def _plot_one(idx, opt):
-            save_path = f"{base_dir}/option_{idx}_qvals.png" if base_dir else None
+        def _plot_one(idx):
             # delegates to OptionBase.plot_q_vals
-            opt.plot_q_vals(
+            self.options[idx].plot_q_vals(
                 activation_data=activation_data,
-                save_path=save_path,
+                base_dir=base_dir,
                 show=show
             )
 
         if policy_id is not None:
-            _plot_one(policy_id, self.options[policy_id])
+            _plot_one(policy_id)
         else:
             for idx, opt in enumerate(self.options):
-                _plot_one(idx, opt)
+                _plot_one(idx)
 
     def plot_meta_qvals(self, activation_data=None, base_dir=None):
         states = self.env.get_planning_states()
@@ -793,7 +765,8 @@ class MetaPolicyContinuous(ABC):
         for uidx in range(len(self.fsa.states) - 1):
             actions, qvals, option_indices = [], [], []
             for state in states:
-                state_idx = self.env.coords_to_state[state]
+                state_cell = self.env.continuous_to_cell(state)
+                state_idx = self.env.coords_to_state[state_cell]
 
                 # 1) pick best option under meta-Q
                 meta_q = self.Q[uidx, state_idx, :]
@@ -834,7 +807,7 @@ class MetaPolicyDQN(MetaPolicyContinuous):
                  normalize_inputs=True,
                  per=False,
                  net_arch=[256, 256]
-                  ):
+                 ):
 
         super().__init__(env, eval_env, fsa, T, gamma, num_iters)
 
