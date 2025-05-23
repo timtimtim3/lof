@@ -188,6 +188,7 @@ class OptionDQN(RLAlgorithm):
                  log: bool = True,
                  log_prefix: str = "option_learning/",
                  device: Union[str, th.device] = 'auto',
+                 eval_freq=500,
                  **kwargs) -> None:
         super().__init__(env, device, fsa_env=None, log_prefix=log_prefix)
         self.gamma = gamma
@@ -206,6 +207,7 @@ class OptionDQN(RLAlgorithm):
         self.num_timesteps = 0
         self.log_prefix = log_prefix + f"option_{self.option_id}/"
         self.meta = meta
+        self.eval_freq = eval_freq
 
         self.n_states  = len(self.env.env.coords_to_state)
         self.n_actions = self.env.action_space.n
@@ -302,7 +304,6 @@ class OptionDQN(RLAlgorithm):
               total_timesteps: int,
               total_episodes: Optional[int] = None,
               reset_num_timesteps: bool = False,
-              eval_freq: int = 1000,
               **kwargs) -> None:
         if reset_num_timesteps:
             self.num_timesteps = 0
@@ -358,14 +359,14 @@ class OptionDQN(RLAlgorithm):
                         self.final_epsilon
                     )
                 # logging
-                if self.log and t % eval_freq == 0:
+                if self.log and t % self.eval_freq == 0:
                     self._update_tab_q()
                     success, reward = self.meta.evaluate_metapolicy()
 
                     # if total_steps % self.eval_freq == 0:
                     #     self.evaluate_options(total_steps)
 
-                    wandb.log({
+                    wb.log({
                         "learning/success": int(success),
                         "learning/fsa_reward": reward,
                         "learning/total_timestep": self.meta.total_steps,
@@ -380,7 +381,7 @@ class OptionDQN(RLAlgorithm):
             if done:
                 self.num_episodes += 1
                 if self.log:
-                    wandb.log({
+                    wb.log({
                         f"{self.log_prefix}episode_return": ep_ret,
                         f"{self.log_prefix}episode": self.num_episodes,
                         f"{self.log_prefix}timestep": self.num_timesteps
