@@ -588,7 +588,7 @@ class MetaPolicyQLearning(MetaPolicy):
                     log_dict = {
                         "learning/success": int(success),
                         "learning/fsa_reward": reward,
-                        "learning/timestep": total_steps,
+                        "learning/total_timestep": total_steps,
                         "learning/episode": i, }
 
                     wb.log(log_dict)

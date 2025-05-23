@@ -368,7 +368,7 @@ class OptionDQN(RLAlgorithm):
                     wandb.log({
                         "learning/success": int(success),
                         "learning/fsa_reward": reward,
-                        "learning/timestep": self.meta.total_steps,
+                        "learning/total_timestep": self.meta.total_steps,
                         f"{self.log_prefix}epsilon": self.epsilon,
                         f"{self.log_prefix}critic_loss": loss.mean().item(),
                         f"{self.log_prefix}timestep": self.num_timesteps,
