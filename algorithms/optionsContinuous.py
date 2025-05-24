@@ -481,10 +481,25 @@ class OptionDQN(RLAlgorithm):
         }, path)
 
     def load(self, path: str, option_id: int):
-        data = th.load(os.path.join(path, f"dqn_option{option_id}.pt"))
+        # pick device
+        device = th.device("cuda") if th.cuda.is_available() else th.device("cpu")
+
+        # load onto correct device
+        data = th.load(os.path.join(path, f"dqn_option{option_id}.pt"), map_location=device)
+
+        # restore and move nets
         self.q_net.load_state_dict(data['q_state'])
+        self.q_net.to(device)
+
         self.target_q_net.load_state_dict(data['target_q_state'])
+        self.target_q_net.to(device)
+
+        # optimizer
         self.optimizer.load_state_dict(data['optimizer'])
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, th.Tensor):
+                    state[k] = v.to(device)
 
     def get_arrow_data(self, batch_size: int = 256):
         """
