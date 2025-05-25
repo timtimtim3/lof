@@ -15,7 +15,7 @@ from lof.algorithms.options import MetaPolicy
 from sfols.plotting.plotting import plot_q_vals
 
 class SubgoalRewardEnv(gym.Wrapper):
-    def __init__(self, env, subgoal_cells):
+    def __init__(self, env, subgoal_cells, reward_goal=True):
         """
         env            : your continuous GridEnvContinuous
         subgoal_cells : iterable of (row,col) tuples making up the goal area
@@ -28,25 +28,29 @@ class SubgoalRewardEnv(gym.Wrapper):
         self.subgoal_cells = set(subgoal_cells)
         self.done          = False
 
+        self.step_reward = 0 if reward_goal else -1
+        self.goal_reward = 1 if reward_goal else 0
+
     def reset(self, **kwargs):
         self.done = False
         return self.env.reset(**kwargs)
 
     def step(self, action):
         obs, _, _, info = self.env.step(action)
+        reward = self.step_reward
 
         if self.done:
             # once we've hit the goal, keep returning done
-            return obs, -1, True, info
+            return obs, reward, True, info
 
         # map continuous obs back to the discrete (row,col)
         state_cell = self.env.continuous_to_cell(obs)
 
         if state_cell in self.subgoal_cells:
             self.done = True
-            return obs, -1, True, info
+            return obs, self.goal_reward, True, info
 
-        return obs, -1, False, info
+        return obs, reward, False, info
 
 
 class OptionDqnSB3:
