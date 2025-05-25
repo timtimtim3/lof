@@ -1,8 +1,9 @@
 from stable_baselines3 import DQN
-import torch
 import gym
-
-from fsa.fsa import FiniteStateAutomaton
+import torch as th
+import torch.nn as nn
+import torch.optim as optim
+from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 from typing import Optional
 import pickle as pkl
@@ -11,8 +12,15 @@ import wandb as wb
 import time
 import os
 
-from lof.algorithms.options import MetaPolicy
+from fsa.fsa import FiniteStateAutomaton
 from sfols.plotting.plotting import plot_q_vals
+from sfols.plotting.plotting import plot_q_vals
+from sfols.rl.rl_algorithm import RLAlgorithm
+from sfols.rl.utils.buffer import ReplayBuffer
+from sfols.rl.utils.prioritized_buffer import PrioritizedReplayBuffer
+from sfols.rl.utils.utils import linearly_decaying_epsilon, polyak_update, huber
+from sfols.rl.utils.nets import mlp
+
 
 class SubgoalRewardEnv(gym.Wrapper):
     def __init__(self, env, subgoal_cells, reward_goal=True):
@@ -84,8 +92,8 @@ class OptionDqnSB3:
 
         for cell, idx in self.env.env.coords_to_state.items():
             cont = self.env.env.cell_to_continuous_center(cell)
-            obs  = torch.as_tensor(cont, dtype=torch.float32, device=self.device).unsqueeze(0)
-            with torch.no_grad():
+            obs  = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
+            with th.no_grad():
                 qvals = self.model.q_net(obs).cpu().numpy().squeeze(0)
             Q_tab[idx] = qvals
 
@@ -105,23 +113,6 @@ class OptionDqnSB3:
         opt.model = DQN.load(path, env=opt.env)
         opt.Q     = np.load(f"{path}/Q_table.npy")
         return opt
-
-
-
-import os
-import numpy as np
-import torch as th
-import torch.nn as nn
-import torch.optim as optim
-from typing import Optional, Union, List, Tuple
-import wandb
-
-from sfols.plotting.plotting import plot_q_vals
-from sfols.rl.rl_algorithm import RLAlgorithm
-from sfols.rl.utils.buffer import ReplayBuffer
-from sfols.rl.utils.prioritized_buffer import PrioritizedReplayBuffer
-from sfols.rl.utils.utils import linearly_decaying_epsilon, polyak_update, huber
-from sfols.rl.utils.nets import mlp
 
 
 class QNet(nn.Module):
@@ -193,6 +184,7 @@ class OptionDQN(RLAlgorithm):
                  log_prefix: str = "option_learning/",
                  device: Union[str, th.device] = 'auto',
                  eval_freq=500,
+                 goal_prop=None,
                  **kwargs) -> None:
         super().__init__(env, device, fsa_env=None, log_prefix=log_prefix)
         self.gamma = gamma
@@ -212,6 +204,7 @@ class OptionDQN(RLAlgorithm):
         self.log_prefix = log_prefix + f"option_{self.option_id}/"
         self.meta = meta
         self.eval_freq = eval_freq
+        self.goal_prop = goal_prop
 
         self.n_states  = len(self.env.env.coords_to_state)
         self.n_actions = self.env.action_space.n
@@ -275,9 +268,9 @@ class OptionDQN(RLAlgorithm):
         # logging
         self.log = log
         if log:
-            wandb.define_metric(f"{log_prefix}epsilon", step_metric="learning/timestep")
-            wandb.define_metric(f"{log_prefix}critic_loss", step_metric="learning/timestep")
-            wandb.define_metric(f"eval/reward", step_metric="learning/timestep")
+            wb.define_metric(f"{log_prefix}epsilon", step_metric="learning/timestep")
+            wb.define_metric(f"{log_prefix}critic_loss", step_metric="learning/timestep")
+            wb.define_metric(f"eval/reward", step_metric="learning/timestep")
 
     def _build_input(self, obs: np.ndarray) -> th.Tensor:
         return th.tensor(obs, dtype=th.float32, device=self.device)
@@ -398,8 +391,8 @@ class OptionDQN(RLAlgorithm):
         # 2) tabularize Q by querying the net at each cell-center
         for cell, idx in self.env.env.coords_to_state.items():
             cont = self.env.env.cell_to_continuous_center(cell)
-            obs  = torch.as_tensor(cont, dtype=torch.float32, device=self.device).unsqueeze(0)
-            with torch.no_grad():
+            obs  = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
+            with th.no_grad():
                 qvals = self.q_net(obs).cpu().numpy().squeeze(0)
             self.Q[idx] = qvals
 
@@ -408,8 +401,8 @@ class OptionDQN(RLAlgorithm):
         state_idx = self.env.env.coords_to_state[cell]
 
         cont = self.env.env.continuous_state_to_continuous_center(state)
-        obs = torch.as_tensor(cont, dtype=torch.float32, device=self.device).unsqueeze(0)
-        with torch.no_grad():
+        obs = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
+        with th.no_grad():
             qvals = self.q_net(obs).cpu().numpy().squeeze(0)
 
         # Ro still just max‐over‐actions of the new Q
@@ -544,7 +537,7 @@ class OptionDQN(RLAlgorithm):
             save_path = f"{base_dir}/qvals_option{self.option_id}.png" if base_dir is not None else None
             arrow_data = self.get_arrow_data()
             plot_q_vals(self.env.env, arrow_data=arrow_data, activation_data=activation_data,
-                        save_path=save_path, show=show)
+                        save_path=save_path, show=show, goal_prop=self.goal_prop)
 
         _plot_one()
 
@@ -851,12 +844,13 @@ class MetaPolicyDQN(MetaPolicyContinuous):
 
         self.define_wb_metrics()
 
-        for option_idx, subgoal_cells in enumerate(self.env.exit_states.values()):
-            self.define_wb_metrics_option(option_idx)
-            option = OptionDQN(self.env, subgoal_cells, option_idx, meta=self, learning_rate=self.lr, gamma=self.gamma,
+        for prop_idx, subgoal_cells in enumerate(self.env.exit_states.values()):
+            self.define_wb_metrics_option(prop_idx)
+            option = OptionDQN(self.env, subgoal_cells, option_id=prop_idx, meta=self, learning_rate=self.lr, gamma=self.gamma,
                                init_epsilon=self.init_epsilon, final_epsilon=self.final_epsilon,
                                epsilon_decay_steps=self.epsilon_decay_steps, learning_starts=self.warmup_steps,
-                               per=self.per, normalize_inputs=self.normalize_inputs, net_arch=self.net_arch)
+                               per=self.per, normalize_inputs=self.normalize_inputs, net_arch=self.net_arch, 
+                               goal_prop=env.PHI_OBJ_TYPES[prop_idx])
             # option = OptionQLearning(self.env, subgoal_idx, self.gamma, self.lr, init_epsilon, final_epsilon,
             #                          warmup_steps, learning_steps)
             self.options.append(option)
