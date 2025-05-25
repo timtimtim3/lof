@@ -84,7 +84,7 @@ class OptionDqnSB3:
 
         for cell, idx in self.env.env.coords_to_state.items():
             cont = self.env.env.cell_to_continuous_center(cell)
-            obs  = torch.as_tensor(cont, dtype=torch.float32).unsqueeze(0)
+            obs  = torch.as_tensor(cont, dtype=torch.float32, device=self.device).unsqueeze(0)
             with torch.no_grad():
                 qvals = self.model.q_net(obs).cpu().numpy().squeeze(0)
             Q_tab[idx] = qvals
@@ -323,8 +323,6 @@ class OptionDQN(RLAlgorithm):
             self.meta.total_steps += 1
             a = self.act(state)
             next_state, reward, done, _ = self.env.step(a)
-            if reward != -1:
-                print('reward:', reward)
 
             # store to buffer
             self.replay_buffer.add(state, a, reward, next_state, done)
@@ -400,7 +398,7 @@ class OptionDQN(RLAlgorithm):
         # 2) tabularize Q by querying the net at each cell-center
         for cell, idx in self.env.env.coords_to_state.items():
             cont = self.env.env.cell_to_continuous_center(cell)
-            obs  = torch.as_tensor(cont, dtype=torch.float32).unsqueeze(0)
+            obs  = torch.as_tensor(cont, dtype=torch.float32, device=self.device).unsqueeze(0)
             with torch.no_grad():
                 qvals = self.q_net(obs).cpu().numpy().squeeze(0)
             self.Q[idx] = qvals
@@ -410,7 +408,7 @@ class OptionDQN(RLAlgorithm):
         state_idx = self.env.env.coords_to_state[cell]
 
         cont = self.env.env.continuous_state_to_continuous_center(state)
-        obs = torch.as_tensor(cont, dtype=torch.float32).unsqueeze(0)
+        obs = torch.as_tensor(cont, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             qvals = self.q_net(obs).cpu().numpy().squeeze(0)
 
