@@ -844,7 +844,7 @@ class MetaPolicyDQN(MetaPolicyContinuous):
 
         self.define_wb_metrics()
 
-        for prop_idx, subgoal_cells in enumerate(self.env.exit_states.values()):
+        for prop_idx, subgoal_cells in env.exit_states.items():
             self.define_wb_metrics_option(prop_idx)
             option = OptionDQN(self.env, subgoal_cells, option_id=prop_idx, meta=self, learning_rate=self.lr, gamma=self.gamma,
                                init_epsilon=self.init_epsilon, final_epsilon=self.final_epsilon,
