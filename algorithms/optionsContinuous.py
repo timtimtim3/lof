@@ -37,7 +37,7 @@ class SubgoalRewardEnv(gym.Wrapper):
         self.done          = False
 
         self.step_reward = 0 if reward_goal else -1
-        self.goal_reward = 1 if reward_goal else 0
+        self.goal_reward = 1 if reward_goal else -1
 
     def reset(self, **kwargs):
         self.done = False
@@ -567,8 +567,8 @@ class MetaPolicyContinuous(ABC):
 
     def save(self, path: str):
 
-        for i, option in enumerate(self.options):
-            fullpath = os.path.join(path, f"options/option{i}/")
+        for option in self.options:
+            fullpath = os.path.join(path, f"options/option{option.option_id}/")
             os.makedirs(fullpath)
             option.save(fullpath)
 
@@ -756,19 +756,19 @@ class MetaPolicyContinuous(ABC):
             policy_id:       index of a single option to plot; if None, plots all.
         """
         # Helper to plot one option
-        def _plot_one(idx):
+        def _plot_one(opt):
             # delegates to OptionBase.plot_q_vals
-            self.options[idx].plot_q_vals(
+            opt.plot_q_vals(
                 activation_data=activation_data,
                 base_dir=base_dir,
                 show=show
             )
 
         if policy_id is not None:
-            _plot_one(policy_id)
+            _plot_one(self.options[policy_id])
         else:
-            for idx, opt in enumerate(self.options):
-                _plot_one(idx)
+            for opt in self.options:
+                _plot_one(opt)
 
     def plot_meta_qvals(self, activation_data=None, base_dir=None):
         states = self.env.get_planning_states()
@@ -844,7 +844,7 @@ class MetaPolicyDQN(MetaPolicyContinuous):
 
         self.define_wb_metrics()
 
-        for prop_idx, subgoal_cells in env.exit_states.items():
+        for prop_idx, subgoal_cells in sorted(env.exit_states.items()):
             self.define_wb_metrics_option(prop_idx)
             option = OptionDQN(self.env, subgoal_cells, option_id=prop_idx, meta=self, learning_rate=self.lr, gamma=self.gamma,
                                init_epsilon=self.init_epsilon, final_epsilon=self.final_epsilon,
