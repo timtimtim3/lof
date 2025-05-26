@@ -326,11 +326,11 @@ class OptionDQN(RLAlgorithm):
                 q_vals = self.q_net(obs_b).gather(1, act_b.long()).squeeze(1)
                 with th.no_grad():
                     next_q = self.target_q_net(nxt_b).max(1)[0]
-                    target = rew_b + self.gamma * (1 - done_b) * next_q
+                    target = rew_b.squeeze(1) + self.gamma * (1 - done_b.squeeze(1)) * next_q
                 td = q_vals - target
                 loss = huber(td)
                 self.optimizer.zero_grad()
-                loss.mean().backward()
+                loss.backward()
                 self.optimizer.step()
 
                 # target update
@@ -356,7 +356,7 @@ class OptionDQN(RLAlgorithm):
                 # logging
                 if self.log and t % self.eval_freq == 0:
                     self._update_tab_q()
-                    success, reward = self.meta.evaluate_metapolicy()
+                    success, reward, neg_step_r = self.meta.evaluate_metapolicy()
 
                     # if total_steps % self.eval_freq == 0:
                     #     self.evaluate_options(total_steps)
@@ -364,6 +364,7 @@ class OptionDQN(RLAlgorithm):
                     wb.log({
                         "learning/success": int(success),
                         "learning/fsa_reward": reward,
+                        "learning/fsa_neg_step_reward": neg_step_r,
                         "learning/total_timestep": self.meta.total_steps,
                         f"{self.log_prefix}epsilon": self.epsilon,
                         f"{self.log_prefix}critic_loss": loss.mean().item(),
@@ -629,18 +630,21 @@ class MetaPolicyContinuous(ABC):
 
             if record:
 
-                successes, acc_rewards = [], []
+                successes, acc_rewards, neg_step_rewards = [], [], []
 
                 for _ in range(self.eval_episodes):
-                    success, acc_reward = self.evaluate_metapolicy(reset=False)
+                    success, acc_reward, neg_step_r = self.evaluate_metapolicy(reset=False)
                     successes.append(success)
                     acc_rewards.append(acc_reward)
+                    neg_step_rewards.append(neg_step_r)
 
                 success = np.average(successes)
                 acc_reward = np.average(acc_rewards)
+                neg_step_reward = np.average(neg_step_rewards)
 
                 log_dict = {"evaluation/success": success,
-                            "evaluation/acc_reward": acc_reward,
+                            "evaluation/fsa_reward": acc_reward,
+                            "evaluation/fsa_neg_step_reward": neg_step_reward,
                             "evaluation/iter": j,
                             "evaluation/time": np.sum(times),
                             }
@@ -648,7 +652,7 @@ class MetaPolicyContinuous(ABC):
                 wb.log(log_dict)
 
         if record:
-            success, acc_reward = self.evaluate_metapolicy(reset=False)
+            success, acc_reward, neg_step_r = self.evaluate_metapolicy(reset=False)
 
         mu_aux = self.Q.argmax(axis=2)
         mu = {}
@@ -663,7 +667,7 @@ class MetaPolicyContinuous(ABC):
 
     def evaluate_metapolicy(self,
                             max_steps: Optional[int] = 200,
-                            max_steps_option: Optional[int] = 40,
+                            max_steps_option: Optional[int] = 200,
                             log: Optional[bool] = False,
                             reset: Optional[bool] = True,
                             i: Optional[int] = None
@@ -692,6 +696,7 @@ class MetaPolicyContinuous(ABC):
             options_used += 1
 
             first, steps_in_option, done = True, 0, False
+            neg_step_r = 0
 
             while (steps_in_option < max_steps_option and tuple(state) not in self.options[option].subgoal_cells) or first:
 
@@ -707,6 +712,7 @@ class MetaPolicyContinuous(ABC):
                 num_steps += 1
                 acc_reward += reward
                 steps_in_option += 1
+                neg_step_r -= 1
 
                 if done or num_steps == max_steps:
                     break
@@ -722,7 +728,7 @@ class MetaPolicyContinuous(ABC):
             self.V = None
             self.mu = None
 
-        return success, acc_reward
+        return success, acc_reward, neg_step_r
 
     def load(self, base_dir: str):
         """
