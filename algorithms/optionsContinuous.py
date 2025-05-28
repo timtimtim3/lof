@@ -497,6 +497,8 @@ class OptionDQN(RLAlgorithm):
                 if isinstance(v, th.Tensor):
                     state[k] = v.to(device)
 
+        self._update_tab_q()
+
     def get_arrow_data(self, batch_size: int = 256):
         """
         Returns the quiver‐plot params (X,Y,U,V,C) for the greedy policy
