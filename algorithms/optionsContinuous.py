@@ -1,9 +1,10 @@
+from omegaconf import ListConfig
 from stable_baselines3 import DQN
 import gym
 import torch as th
 import torch.nn as nn
 import torch.optim as optim
-from typing import Optional, Union, List
+from typing import Optional, Union, List, SupportsIndex
 from abc import ABC, abstractmethod
 from typing import Optional
 import pickle as pkl
@@ -12,6 +13,7 @@ import wandb as wb
 import time
 import os
 
+from envs.wrappers import GridEnvWrapper
 from fsa.fsa import FiniteStateAutomaton
 from sfols.plotting.plotting import plot_q_vals
 from sfols.plotting.plotting import plot_q_vals
@@ -34,7 +36,7 @@ class SubgoalRewardEnv(gym.Wrapper):
         if not hasattr(subgoal_cells, "__iter__") or isinstance(subgoal_cells, tuple):
             subgoal_cells = [subgoal_cells]
         self.subgoal_cells = set(subgoal_cells)
-        self.done          = False
+        self.done = False
 
         self.step_reward = 0 if reward_goal else -1
         self.goal_reward = 1 if reward_goal else -1
@@ -65,9 +67,9 @@ class OptionDqnSB3:
     def __init__(self,
                  base_env: gym.Env,
                  subgoal_cells: set,
-                 gamma: float        = 0.99,
+                 gamma: float = 0.99,
                  total_timesteps: int = 100_000,
-                 net_arch: list       = [128,128],
+                 net_arch: list = [128, 128],
                  **dqn_kwargs):
         # Wrap to give +1 reward & terminate at the subgoal
         self.env = SubgoalRewardEnv(base_env, subgoal_cells)
@@ -86,13 +88,13 @@ class OptionDqnSB3:
         # 1) learn the network
         self.model.learn(total_timesteps=self.total_timesteps)
         # 2) tabularize Q by querying the net at each cell-center
-        n_states  = len(self.env.env.coords_to_state)
+        n_states = len(self.env.env.coords_to_state)
         n_actions = self.env.action_space.n
-        Q_tab     = np.zeros((n_states, n_actions), dtype=np.float32)
+        Q_tab = np.zeros((n_states, n_actions), dtype=np.float32)
 
         for cell, idx in self.env.env.coords_to_state.items():
             cont = self.env.env.cell_to_continuous_center(cell)
-            obs  = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
+            obs = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
             with th.no_grad():
                 qvals = self.model.q_net(obs).cpu().numpy().squeeze(0)
             Q_tab[idx] = qvals
@@ -111,7 +113,7 @@ class OptionDqnSB3:
     def load(cls, base_env, subgoal_cell, cell_size, path, **init_kwargs):
         opt = cls(base_env, subgoal_cell, cell_size, **init_kwargs)
         opt.model = DQN.load(path, env=opt.env)
-        opt.Q     = np.load(f"{path}/Q_table.npy")
+        opt.Q = np.load(f"{path}/Q_table.npy")
         return opt
 
 
@@ -206,7 +208,7 @@ class OptionDQN(RLAlgorithm):
         self.eval_freq = eval_freq
         self.goal_prop = goal_prop
 
-        self.n_states  = len(self.env.env.coords_to_state)
+        self.n_states = len(self.env.env.coords_to_state)
         self.n_actions = self.env.action_space.n
         self.Q = np.zeros((self.n_states, self.n_actions), dtype=np.float32)
         self.Ro = np.zeros(self.n_states)
@@ -267,10 +269,6 @@ class OptionDQN(RLAlgorithm):
 
         # logging
         self.log = log
-        if log:
-            wb.define_metric(f"{log_prefix}epsilon", step_metric="learning/timestep")
-            wb.define_metric(f"{log_prefix}critic_loss", step_metric="learning/timestep")
-            wb.define_metric(f"eval/reward", step_metric="learning/timestep")
 
     def _build_input(self, obs: np.ndarray) -> th.Tensor:
         return th.tensor(obs, dtype=th.float32, device=self.device)
@@ -356,19 +354,17 @@ class OptionDQN(RLAlgorithm):
                 # logging
                 if self.log and t % self.eval_freq == 0:
                     self._update_tab_q()
-                    success, reward, neg_step_r = self.meta.evaluate_metapolicy()
+                    metrics = self.meta.evaluate_fsa()
 
                     # if total_steps % self.eval_freq == 0:
                     #     self.evaluate_options(total_steps)
 
                     wb.log({
-                        "learning/success": int(success),
-                        "learning/fsa_reward": reward,
-                        "learning/fsa_neg_step_reward": neg_step_r,
+                        f"{self.log_prefix}timestep": self.num_timesteps,
                         "learning/total_timestep": self.meta.total_steps,
                         f"{self.log_prefix}epsilon": self.epsilon,
                         f"{self.log_prefix}critic_loss": loss.mean().item(),
-                        f"{self.log_prefix}timestep": self.num_timesteps,
+                        **metrics
                     })
 
             # episode bookkeeping
@@ -376,12 +372,11 @@ class OptionDQN(RLAlgorithm):
             state = next_state
             if done:
                 self.num_episodes += 1
-                if self.log:
-                    wb.log({
-                        f"{self.log_prefix}episode_return": ep_ret,
-                        f"{self.log_prefix}episode": self.num_episodes,
-                        f"{self.log_prefix}timestep": self.num_timesteps
-                    })
+                # if self.log:
+                #     wb.log({
+                #         f"{self.log_prefix}episode": self.num_episodes,
+                #         f"{self.log_prefix}timestep": self.num_timesteps
+                #     })
                 state = self.env.reset()
                 done = False
                 ep_ret = 0.0
@@ -392,7 +387,7 @@ class OptionDQN(RLAlgorithm):
         # 2) tabularize Q by querying the net at each cell-center
         for cell, idx in self.env.env.coords_to_state.items():
             cont = self.env.env.cell_to_continuous_center(cell)
-            obs  = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
+            obs = th.as_tensor(cont, dtype=th.float32, device=self.device).unsqueeze(0)
             with th.no_grad():
                 qvals = self.q_net(obs).cpu().numpy().squeeze(0)
             self.Q[idx] = qvals
@@ -510,27 +505,27 @@ class OptionDQN(RLAlgorithm):
 
         # 2) build a tensor input for each center
         #    _build_input returns a torch.Tensor of shape [cont_dim+fsa_dim]
-        inputs = [ self._build_input(np.array(center))
-                   for center in centers ]
+        inputs = [self._build_input(np.array(center))
+                  for center in centers]
 
         all_actions = []
-        all_qvals   = []
+        all_qvals = []
 
         # 3) batch through q_net
         for start in range(0, N, batch_size):
-            batch = inputs[start : start + batch_size]  # list of Tensors
-            batch_tensor = th.stack(batch, dim=0)        # [B, input_dim]
+            batch = inputs[start: start + batch_size]  # list of Tensors
+            batch_tensor = th.stack(batch, dim=0)  # [B, input_dim]
             with th.no_grad():
-                q_out = self.q_net(batch_tensor)        # [B, action_dim]
+                q_out = self.q_net(batch_tensor)  # [B, action_dim]
             # pick greedy actions & values
-            acts = q_out.argmax(dim=1).cpu().numpy()   # shape [B,]
+            acts = q_out.argmax(dim=1).cpu().numpy()  # shape [B,]
             qmax = q_out.max(dim=1).values.cpu().numpy()
             all_actions.append(acts)
             all_qvals.append(qmax)
 
         # 4) concatenate back to full length
         actions = np.concatenate(all_actions, axis=0)  # [N,]
-        qvals   = np.concatenate(all_qvals,   axis=0)  # [N,]
+        qvals = np.concatenate(all_qvals, axis=0)  # [N,]
 
         # 5) hand off to your env’s quiver‐builder
         return self.env.env.get_arrow_data(actions, qvals, states=centers)
@@ -546,23 +541,28 @@ class OptionDQN(RLAlgorithm):
 
 
 class MetaPolicyContinuous(ABC):
-    def __init__(self, env, eval_env,
-                 fsa: FiniteStateAutomaton,
-                 T: np.ndarray,
+    def __init__(self, env, eval_env: Union[list[GridEnvWrapper], ListConfig[GridEnvWrapper]],
+                 T: list[np.ndarray],
                  gamma: Optional[float] = 1,
                  num_iters: Optional[float] = 100,
-                 eval_episodes: Optional[float] = 1):
+                 eval_episodes: Union[SupportsIndex, SupportsIndex] = 1):
 
         self.env = env
         self.eval_env = eval_env
-        self.fsa = fsa
-        self.T = T
+        if not (isinstance(self.eval_env, ListConfig) or isinstance(self.eval_env, list)):
+            self.eval_env = [self.eval_env]
+        self.T = {self.eval_env[i].fsa.name: T[i] for i in range(len(self.eval_env))} \
+            if (isinstance(T, list) or isinstance(T, ListConfig)) else {self.eval_env[0].fsa.name: T}
+        self.options = []
+
         self.gamma = gamma
         self.num_iters = num_iters
         self.eval_episodes = eval_episodes
 
-        self.Q = None
-        self.V = None
+        self.Q = {env.fsa.name: None for env in self.eval_env}
+        self.V = {env.fsa.name: None for env in self.eval_env}
+        self.mu = {}
+        self.n_fsa = 1 if not isinstance(self.eval_env, list) else len(self.eval_env)
 
     @abstractmethod
     def learn_options(self):
@@ -575,20 +575,24 @@ class MetaPolicyContinuous(ABC):
             os.makedirs(fullpath)
             option.save(fullpath)
 
-        pkl.dump(self.Q, open(os.path.join(path, "Q.pkl"), "wb"))
-        pkl.dump(self.mu, open(os.path.join(path, "metapolicy.pkl"), "wb"))
+        for env in self.eval_env:
+            pkl.dump(self.Q[env.fsa.name], open(os.path.join(path, f"Q_{env.fsa.name}.pkl"), "wb"))
+            pkl.dump(self.mu[env.fsa.name], open(os.path.join(path, f"metapolicy_{env.fsa.name}.pkl"), "wb"))
 
-    def train_metapolicy(self,
-                         record: bool = False,
-                         iters: Optional[int] = None):
+    def train_metapolicies(self, record: bool = False, iters: Optional[int] = None):
+        for eval_env in self.eval_env:
+            self.train_metapolicy(eval_env, record=record, iters=iters)
+        _ = self.evaluate_fsa(reset=False, prefix="evaluation")
 
-        if self.Q is None and self.V is None:
-            self.Q = np.zeros((len(self.fsa.states), self.env.s_dim, len(self.options)))
-            self.V = np.zeros((len(self.fsa.states), self.env.s_dim))
+    def train_metapolicy(self, eval_env, record: bool = False, iters: Optional[int] = None):
+
+        if self.Q[eval_env.fsa.name] is None and self.V[eval_env.fsa.name] is None:
+            self.Q[eval_env.fsa.name] = np.zeros((len(eval_env.fsa.states), self.env.s_dim, len(self.options)))
+            self.V[eval_env.fsa.name] = np.zeros((len(eval_env.fsa.states), self.env.s_dim))
 
         # FSA rewards (1 everywhere except at terminal)
-        R = np.ones(len(self.fsa.states))
-        terminals = [self.fsa.is_terminal(s) for s in self.fsa.states]
+        R = np.ones(len(eval_env.fsa.states))
+        terminals = [eval_env.fsa.is_terminal(s) for s in eval_env.fsa.states]
         R[np.where(terminals)] = 0
 
         times = [0]
@@ -604,70 +608,85 @@ class MetaPolicyContinuous(ABC):
                 Ro, To = option.Ro - 1, option.To
 
                 # Eq. 3 LOF paper
-                rewards = R * (np.tile(Ro[:, None], [1, len(self.fsa.states)]) - 1)
+                rewards = R * (np.tile(Ro[:, None], [1, len(eval_env.fsa.states)]) - 1)
 
-                next_value = np.dot(To, self.V.T)
+                next_value = np.dot(To, self.V[eval_env.fsa.name].T)
 
                 preQ = rewards + next_value
 
-                self.Q[:, :, oidx] = preQ.T
+                self.Q[eval_env.fsa.name][:, :, oidx] = preQ.T
 
-            self.V = self.Q.max(axis=2)
-            preV = np.tile(self.V[None, ...], (len(self.fsa.states), 1, 1))
+            self.V[eval_env.fsa.name] = self.Q[eval_env.fsa.name].max(axis=2)
+            preV = np.tile(self.V[eval_env.fsa.name][None, ...], (len(eval_env.fsa.states), 1, 1))
 
             # Multiply by T before passing to next iteration (this masks the value function)
-            self.V = np.sum(self.T * preV, axis=1)
+            self.V[eval_env.fsa.name] = np.sum(self.T[eval_env.fsa.name] * preV, axis=1)
 
             # For each iteration, evaluate the policy
-            mu_aux = self.Q.argmax(axis=2)
+            mu_aux = self.Q[eval_env.fsa.name].argmax(axis=2)
             mu = {}
 
             elapsed_iter = time.time() - iter_start if record else None
 
             for (fsa_state_idx, state_idx) in np.ndindex(mu_aux.shape):
-                f, s = self.fsa.states[fsa_state_idx], self.env.state_to_coords[state_idx]
+                f, s = eval_env.fsa.states[fsa_state_idx], self.env.state_to_coords[state_idx]
                 mu[(f, s)] = mu_aux[fsa_state_idx, state_idx]
 
             times.append(elapsed_iter)
 
             if record:
-
-                successes, acc_rewards, neg_step_rewards = [], [], []
-
                 for _ in range(self.eval_episodes):
-                    success, acc_reward, neg_step_r = self.evaluate_metapolicy(reset=False)
-                    successes.append(success)
-                    acc_rewards.append(acc_reward)
-                    neg_step_rewards.append(neg_step_r)
+                    metrics = self.evaluate_fsa(eval_env=eval_env, reset=False, prefix="meta_training")
 
-                success = np.average(successes)
-                acc_reward = np.average(acc_rewards)
-                neg_step_reward = np.average(neg_step_rewards)
-
-                log_dict = {"evaluation/success": success,
-                            "evaluation/fsa_reward": acc_reward,
-                            "evaluation/fsa_neg_step_reward": neg_step_reward,
-                            "evaluation/iter": j,
-                            "evaluation/time": np.sum(times),
-                            }
-
+                log_dict = {
+                    "meta_training/iter": j,
+                    "meta_training/time": np.sum(times),
+                    **metrics
+                }
                 wb.log(log_dict)
 
-        if record:
-            success, acc_reward, neg_step_r = self.evaluate_metapolicy(reset=False)
+                # old code
+                # successes.append(success)
+                # acc_rewards.append(acc_reward)
+                # neg_step_rewards.append(neg_step_r)
+                # success = np.average(successes)
+                # acc_reward = np.average(acc_rewards)
+                # neg_step_reward = np.average(neg_step_rewards)
 
-        mu_aux = self.Q.argmax(axis=2)
+        if record:
+            _ = self.evaluate_fsa(eval_env=eval_env, reset=False, prefix="meta_training")
+
+        mu_aux = self.Q[eval_env.fsa.name].argmax(axis=2)
         mu = {}
 
         for (fsa_state_idx, state_idx) in np.ndindex(mu_aux.shape):
-            f, s = self.fsa.states[fsa_state_idx], self.env.state_to_coords[state_idx]
+            f, s = eval_env.fsa.states[fsa_state_idx], self.env.state_to_coords[state_idx]
             mu[(f, s)] = mu_aux[fsa_state_idx, state_idx]
 
-        self.mu = mu
+        self.mu[eval_env.fsa.name] = mu
 
         return mu
 
+    def evaluate_fsa(self, eval_env=None, reset=True, prefix="learning"):
+        log_dict, fsa_rewards, fsa_neg_step_rewards = {}, [], []
+
+        envs_to_evaluate = [eval_env] if eval_env is not None else self.eval_env
+        for eval_env in envs_to_evaluate:
+            fsa_reward, fsa_neg_step_reward = self.evaluate_metapolicy(eval_env, reset=reset)
+            log_dict[f"{prefix}/fsa_reward/{eval_env.fsa.name}"] = fsa_reward
+            log_dict[f"{prefix}/fsa_neg_reward/{eval_env.fsa.name}"] = fsa_neg_step_reward
+            fsa_rewards.append(fsa_reward)
+            fsa_neg_step_rewards.append(fsa_neg_step_reward)
+
+        if len(envs_to_evaluate) > 1:
+            average_fsa_reward = sum(fsa_rewards) / len(self.eval_env)
+            average_fsa_neg_step_reward = sum(fsa_neg_step_rewards) / len(self.eval_env)
+            log_dict[f"{prefix}/fsa_reward_average"] = average_fsa_reward
+            log_dict[f"{prefix}/fsa_neg_reward_average"] = average_fsa_neg_step_reward
+        return log_dict
+
     def evaluate_metapolicy(self,
+                            eval_env: GridEnvWrapper,
                             max_steps: Optional[int] = 200,
                             max_steps_option: Optional[int] = 200,
                             log: Optional[bool] = False,
@@ -675,23 +694,23 @@ class MetaPolicyContinuous(ABC):
                             i: Optional[int] = None
                             ):
 
-        if self.Q is None:
-            self.train_metapolicy()
+        if self.Q[eval_env.fsa.name] is None:
+            self.train_metapolicy(eval_env)
 
         acc_reward, success = 0, False
         num_steps = 0
 
-        (f_state, state), p = self.eval_env.reset()
+        (f_state, state), p = eval_env.reset()
 
         options_used = 0
 
         while num_steps < max_steps:
 
-            fsa_state_idx = self.fsa.states.index(f_state)
-            state_cell = self.env.continuous_to_cell(state)
-            state_idx = self.env.coords_to_state[state_cell]
+            fsa_state_idx = eval_env.fsa.states.index(f_state)
+            state_cell = eval_env.env.continuous_to_cell(state)
+            state_idx = eval_env.env.coords_to_state[state_cell]
 
-            qvalues = self.Q[fsa_state_idx, state_idx]
+            qvalues = self.Q[eval_env.fsa.name][fsa_state_idx, state_idx]
 
             option = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
 
@@ -700,14 +719,15 @@ class MetaPolicyContinuous(ABC):
             first, steps_in_option, done = True, 0, False
             neg_step_r = 0
 
-            while (steps_in_option < max_steps_option and tuple(state) not in self.options[option].subgoal_cells) or first:
+            while ((steps_in_option < max_steps_option and tuple(state) not in self.options[option].subgoal_cells)
+                   or first):
 
-                state_cell = self.env.continuous_to_cell(state)
-                state_idx = self.env.coords_to_state[state_cell]
+                state_cell = eval_env.env.continuous_to_cell(state)
+                state_idx = eval_env.env.coords_to_state[state_cell]
                 qvalues = self.options[option].Q[state_idx]
                 action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
 
-                (f_state, state), reward, done, info = self.eval_env.step(action)
+                (f_state, state), reward, done, info = eval_env.step(action)
 
                 p = info["proposition"]
 
@@ -722,34 +742,72 @@ class MetaPolicyContinuous(ABC):
                 first = False
 
             if done:
-                success = self.fsa.is_terminal(f_state)
+                success = eval_env.fsa.is_terminal(f_state)
                 break
 
         if reset:
-            self.Q = None
-            self.V = None
-            self.mu = None
+            self.Q[eval_env.fsa.name] = None
+            self.V[eval_env.fsa.name] = None
+            self.mu[eval_env.fsa.name] = None
 
-        return success, acc_reward, neg_step_r
+        return acc_reward, neg_step_r
 
     def load(self, base_dir: str):
         """
-        Instantiate a MetaPolicy subclass and rehydrate its options, Q, and mu.
+        Instantiate a MetaPolicy subclass and rehydrate its options, plus
+        load all Q and mu files named by their FSA names:
+          Q_{fsa_name}.pkl
+          metapolicy_{fsa_name}.pkl
         """
+        # 1) First load each option folder as before
+        print(base_dir)
         opts_dir = os.path.join(base_dir, "options")
-        # assume folders option0, option1, …, optionN
         for name in sorted(os.listdir(opts_dir)):
             if not name.startswith("option") or ".png" in name:
                 continue
             idx = int(name.replace("option", ""))
             subpath = os.path.join(opts_dir, name)
-
             option = self.options[idx]
             option.load(path=subpath, option_id=idx)
 
-        # 3) Load the meta‐Q and mu
-        self.Q = pkl.load(open(os.path.join(base_dir, "Q.pkl"), "rb"))
-        self.mu = pkl.load(open(os.path.join(base_dir, "metapolicy.pkl"), "rb"))
+        # 2) Build the set of valid FSA names from your eval_envs
+        valid_names = {env.fsa.name for env in self.eval_env}
+
+        # Prepare containers if they don't exist
+        if not hasattr(self, 'Q'):
+            self.Q = {}
+        if not hasattr(self, 'mu'):
+            self.mu = {}
+
+        # 3) Find and load all Q_*.pkl and metapolicy_*.pkl files
+        for fname in os.listdir(base_dir):
+            # Q files
+            if fname.startswith("Q_") and fname.endswith(".pkl"):
+                fsa_name = fname[len("Q_"):-len(".pkl")]
+                if fsa_name not in valid_names:
+                    raise ValueError(f"Found Q file for unknown FSA '{fsa_name}'")
+                path = os.path.join(base_dir, fname)
+                self.Q[fsa_name] = pkl.load(open(path, "rb"))
+
+            # metapolicy files
+            elif fname.startswith("metapolicy_") and fname.endswith(".pkl"):
+                fsa_name = fname[len("metapolicy_"):-len(".pkl")]
+                if fsa_name not in valid_names:
+                    raise ValueError(f"Found metapolicy file for unknown FSA '{fsa_name}'")
+                path = os.path.join(base_dir, fname)
+                self.mu[fsa_name] = pkl.load(open(path, "rb"))
+
+        # 4) Sanity check: did we load one of each?
+        missing_q = valid_names - set(self.Q.keys())
+        missing_mu = valid_names - set(self.mu.keys())
+        if missing_q or missing_mu:
+            raise RuntimeError(
+                f"After load, missing data for FSAs:\n"
+                f" Q missing for: {sorted(missing_q)}\n"
+                f" mu missing for: {sorted(missing_mu)}"
+            )
+
+        print(f"Successfully loaded Q and mu for FSAs: {sorted(valid_names)}")
 
     def plot_q_vals(self, activation_data=None, base_dir: Optional[str] = None, show: bool = True,
                     policy_id: Optional[int] = None):
@@ -763,6 +821,7 @@ class MetaPolicyContinuous(ABC):
             show:            whether to display the figure.
             policy_id:       index of a single option to plot; if None, plots all.
         """
+
         # Helper to plot one option
         def _plot_one(opt):
             # delegates to OptionBase.plot_q_vals
@@ -781,35 +840,35 @@ class MetaPolicyContinuous(ABC):
     def plot_meta_qvals(self, activation_data=None, base_dir=None):
         states = self.env.get_planning_states()
 
-        for uidx in range(len(self.fsa.states) - 1):
-            actions, qvals, option_indices = [], [], []
-            for state in states:
-                state_cell = self.env.continuous_to_cell(state)
-                state_idx = self.env.coords_to_state[state_cell]
+        for eval_env in self.eval_env:
+            for uidx in range(len(eval_env.fsa.states) - 1):
+                actions, qvals, option_indices = [], [], []
+                for state in states:
+                    state_cell = self.env.continuous_to_cell(state)
+                    state_idx = self.env.coords_to_state[state_cell]
 
-                # 1) pick best option under meta-Q
-                meta_q = self.Q[uidx, state_idx, :]
-                opt_idx = int(np.random.choice(np.argwhere(meta_q == np.max(meta_q)).flatten()))
-                option_indices.append(opt_idx)
+                    # 1) pick best option under meta-Q
+                    meta_q = self.Q[eval_env.fsa.name][uidx, state_idx, :]
+                    opt_idx = int(np.random.choice(np.argwhere(meta_q == np.max(meta_q)).flatten()))
+                    option_indices.append(opt_idx)
 
-                # 2) within that option, pick its greedy primitive action & Q-value
-                prim_qs = self.options[opt_idx].Q[state_idx, :]
-                prim_act = int(np.argmax(prim_qs))
-                actions.append(prim_act)
+                    # 2) within that option, pick its greedy primitive action & Q-value
+                    prim_qs = self.options[opt_idx].Q[state_idx, :]
+                    prim_act = int(np.argmax(prim_qs))
+                    actions.append(prim_act)
 
-                prim_q = float(prim_qs[prim_act])
-                qvals.append(prim_q)
+                    prim_q = float(prim_qs[prim_act])
+                    qvals.append(prim_q)
 
-            save_path = f"{base_dir}/meta_u{uidx}.png" if base_dir is not None else None
-            arrow_data = self.env.get_arrow_data(np.array(actions), np.array(qvals), states)
-            plot_q_vals(self.env, arrow_data=arrow_data, activation_data=activation_data,
-                        policy_indices=option_indices, save_path=save_path)
+                save_path = f"{base_dir}/meta_{eval_env.fsa.name}_u{uidx}.png" if base_dir is not None else None
+                arrow_data = self.env.get_arrow_data(np.array(actions), np.array(qvals), states)
+                plot_q_vals(self.env, arrow_data=arrow_data, activation_data=activation_data,
+                            policy_indices=option_indices, save_path=save_path, fsa_name=eval_env.fsa.name)
 
 
 class MetaPolicyDQN(MetaPolicyContinuous):
     def __init__(self, env, eval_env,
-                 fsa: FiniteStateAutomaton,
-                 T: np.ndarray,
+                 T: list[np.ndarray],
                  gamma: Optional[float] = 1.,
                  num_iters: Optional[int] = 50,
                  lr: Optional[float] = 0.2,
@@ -828,7 +887,7 @@ class MetaPolicyDQN(MetaPolicyContinuous):
                  net_arch=[256, 256]
                  ):
 
-        super().__init__(env, eval_env, fsa, T, gamma, num_iters)
+        super().__init__(env, eval_env, T, gamma, num_iters)
 
         self.lr = lr
 
@@ -854,13 +913,11 @@ class MetaPolicyDQN(MetaPolicyContinuous):
 
         for prop_idx, subgoal_cells in sorted(env.exit_states.items()):
             self.define_wb_metrics_option(prop_idx)
-            option = OptionDQN(self.env, subgoal_cells, option_id=prop_idx, meta=self, learning_rate=self.lr, gamma=self.gamma,
-                               init_epsilon=self.init_epsilon, final_epsilon=self.final_epsilon,
+            option = OptionDQN(self.env, subgoal_cells, option_id=prop_idx, meta=self, learning_rate=self.lr,
+                               gamma=self.gamma, init_epsilon=self.init_epsilon, final_epsilon=self.final_epsilon,
                                epsilon_decay_steps=self.epsilon_decay_steps, learning_starts=self.warmup_steps,
-                               per=self.per, normalize_inputs=self.normalize_inputs, net_arch=self.net_arch, 
+                               per=self.per, normalize_inputs=self.normalize_inputs, net_arch=self.net_arch,
                                goal_prop=env.PHI_OBJ_TYPES[prop_idx])
-            # option = OptionQLearning(self.env, subgoal_idx, self.gamma, self.lr, init_epsilon, final_epsilon,
-            #                          warmup_steps, learning_steps)
             self.options.append(option)
 
     def get_epsilon_greedy_action(self,
@@ -878,13 +935,15 @@ class MetaPolicyDQN(MetaPolicyContinuous):
         self.total_steps = 0
         for oidx, option in enumerate(self.options):
             self.options[oidx].learn(total_timesteps=self.learning_steps)
+            # self.save(self.base_save_dir)
         self.env.reset()
 
     def evaluate_options(self,
+                         eval_env,
                          num_step: int,
                          max_steps: Optional[int] = 50):
 
-        env = self.eval_env.env
+        env = eval_env.env
 
         for i, option in enumerate(self.options):
 
@@ -907,16 +966,23 @@ class MetaPolicyDQN(MetaPolicyContinuous):
                 if obs == option.subgoal_state:
                     break
 
-            wb.log({f"option_learning/option_{i}/acc.reward": acc_reward, "learning/timestep": num_step})
+            # wb.log({f"option_learning/option_{i}/acc.reward": acc_reward, "learning/timestep": num_step})
 
     def define_wb_metrics(self):
-        wb.define_metric(f"learning/success", step_metric="learning/timestep")
-        wb.define_metric(f"learning/fsa_reward", step_metric="learning/timestep")
-        wb.define_metric(f"learning/episode", step_metric="learning/timestep")
-        wb.define_metric(f"learning/timestep")
+        wb.define_metric(f"meta_training/iter")
+        wb.define_metric("meta_training/time", step_metric="meta_training/iter")
+
+        for eval_env in self.eval_env:
+            wb.define_metric(f"meta_training/fsa_reward/{eval_env.fsa.name}", step_metric="meta_training/iter")
+            wb.define_metric(f"meta_training/fsa_neg_reward/{eval_env.fsa.name}", step_metric="meta_training/iter")
+
+            wb.define_metric(f"learning/fsa_reward/{eval_env.fsa.name}", step_metric="learning/total_timestep")
+            wb.define_metric(f"learning/fsa_neg_reward/{eval_env.fsa.name}", step_metric="learning/total_timestep")
+            wb.define_metric(f"learning/fsa_reward_average/{eval_env.fsa.name}", step_metric="learning/total_timestep")
+            wb.define_metric(f"learning/fsa_neg_reward_average/{eval_env.fsa.name}", step_metric="learning/total_timestep")
 
     def define_wb_metrics_option(self, option_idx):
-        wb.define_metric(f"option_learning/option_{option_idx}/acc.reward",
-                         step_metric=f"option_learning/option_{option_idx}/num_steps")
         wb.define_metric(f"option_learning/option_{option_idx}/epsilon",
-                         step_metric=f"option_learning/option_{option_idx}/num_steps")
+                         step_metric=f"option_learning/option_{option_idx}/timestep")
+        wb.define_metric(f"option_learning/option_{option_idx}/critic_loss",
+                         step_metric=f"option_learning/option_{option_idx}/timestep")
