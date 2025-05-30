@@ -183,7 +183,7 @@ class OptionDQN(RLAlgorithm):
                  min_priority: float = 1.0,
                  normalize_inputs: bool = True,
                  log: bool = True,
-                 log_prefix: str = "option_learning/",
+                 log_prefix: str = "",
                  device: Union[str, th.device] = 'auto',
                  eval_freq=500,
                  goal_prop=None,
@@ -360,7 +360,7 @@ class OptionDQN(RLAlgorithm):
                     #     self.evaluate_options(total_steps)
 
                     wb.log({
-                        f"{self.log_prefix}timestep": self.num_timesteps,
+                        "learning/timestep": self.num_timesteps,
                         "learning/total_timestep": self.meta.total_steps,
                         f"{self.log_prefix}epsilon": self.epsilon,
                         f"{self.log_prefix}critic_loss": loss.mean().item(),
@@ -471,6 +471,11 @@ class OptionDQN(RLAlgorithm):
             'optimizer': self.optimizer.state_dict(),
         }, path)
 
+        # 2) numpy dumps of the tabular data
+        np.save(os.path.join(base_dir, f"Q_option{self.option_id}.npy"), self.Q)
+        np.save(os.path.join(base_dir, f"Ro_option{self.option_id}.npy"), self.Ro)
+        np.save(os.path.join(base_dir, f"To_option{self.option_id}.npy"), self.To)
+
     def load(self, path: str, option_id: int):
         # pick device
         device = th.device("cuda") if th.cuda.is_available() else th.device("cpu")
@@ -492,7 +497,19 @@ class OptionDQN(RLAlgorithm):
                 if isinstance(v, th.Tensor):
                     state[k] = v.to(device)
 
-        self._update_tab_q()
+        # 2) load numpy arrays
+        q_path  = os.path.join(path, f"Q_option{option_id}.npy")
+        ro_path = os.path.join(path, f"Ro_option{option_id}.npy")
+        to_path = os.path.join(path, f"To_option{option_id}.npy")
+
+        if os.path.exists(q_path):
+            self.Q  = np.load(q_path)
+        else:
+            self._update_tab_q()
+        if os.path.exists(ro_path):
+            self.Ro = np.load(ro_path)
+        if os.path.exists(to_path):
+            self.To = np.load(to_path)
 
     def get_arrow_data(self, batch_size: int = 256):
         """
@@ -579,12 +596,16 @@ class MetaPolicyContinuous(ABC):
             pkl.dump(self.Q[env.fsa.name], open(os.path.join(path, f"Q_{env.fsa.name}.pkl"), "wb"))
             pkl.dump(self.mu[env.fsa.name], open(os.path.join(path, f"metapolicy_{env.fsa.name}.pkl"), "wb"))
 
-    def train_metapolicies(self, record: bool = False, iters: Optional[int] = None):
+    def train_metapolicies(self, record: bool = False, iters: Optional[int] = None, reset_train: bool = False):
         for eval_env in self.eval_env:
-            self.train_metapolicy(eval_env, record=record, iters=iters)
-        _ = self.evaluate_fsa(reset=False, prefix="evaluation")
+            self.train_metapolicy(eval_env, record=record, iters=iters, reset_train=reset_train)
+        # _ = self.evaluate_fsa(reset=False, prefix="evaluation")
 
-    def train_metapolicy(self, eval_env, record: bool = False, iters: Optional[int] = None):
+    def train_metapolicy(self, eval_env, record: bool = False, iters: Optional[int] = None, reset_train: bool = False):
+
+        if reset_train:
+            self.Q[eval_env.fsa.name] = None
+            self.V[eval_env.fsa.name] = None
 
         if self.Q[eval_env.fsa.name] is None and self.V[eval_env.fsa.name] is None:
             self.Q[eval_env.fsa.name] = np.zeros((len(eval_env.fsa.states), self.env.s_dim, len(self.options)))
@@ -719,15 +740,15 @@ class MetaPolicyContinuous(ABC):
             first, steps_in_option, done = True, 0, False
             neg_step_r = 0
 
-            while ((steps_in_option < max_steps_option and tuple(state) not in self.options[option].subgoal_cells)
+            while ((steps_in_option < max_steps_option and tuple(state_cell) not in self.options[option].subgoal_cells)
                    or first):
 
-                state_cell = eval_env.env.continuous_to_cell(state)
-                state_idx = eval_env.env.coords_to_state[state_cell]
                 qvalues = self.options[option].Q[state_idx]
                 action = np.random.choice(np.argwhere(qvalues == np.amax(qvalues)).flatten())
 
                 (f_state, state), reward, done, info = eval_env.step(action)
+                state_cell = eval_env.env.continuous_to_cell(state)
+                state_idx = eval_env.env.coords_to_state[state_cell]
 
                 p = info["proposition"]
 
@@ -863,7 +884,8 @@ class MetaPolicyContinuous(ABC):
                 save_path = f"{base_dir}/meta_{eval_env.fsa.name}_u{uidx}.png" if base_dir is not None else None
                 arrow_data = self.env.get_arrow_data(np.array(actions), np.array(qvals), states)
                 plot_q_vals(self.env, arrow_data=arrow_data, activation_data=activation_data,
-                            policy_indices=option_indices, save_path=save_path, fsa_name=eval_env.fsa.name)
+                            policy_indices=option_indices, save_path=save_path, fsa_name=eval_env.fsa.name, 
+                            goal_prop=f"u{uidx}")
 
 
 class MetaPolicyDQN(MetaPolicyContinuous):
@@ -982,7 +1004,7 @@ class MetaPolicyDQN(MetaPolicyContinuous):
             wb.define_metric(f"learning/fsa_neg_reward_average/{eval_env.fsa.name}", step_metric="learning/total_timestep")
 
     def define_wb_metrics_option(self, option_idx):
-        wb.define_metric(f"option_learning/option_{option_idx}/epsilon",
-                         step_metric=f"option_learning/option_{option_idx}/timestep")
-        wb.define_metric(f"option_learning/option_{option_idx}/critic_loss",
-                         step_metric=f"option_learning/option_{option_idx}/timestep")
+        wb.define_metric(f"option_{option_idx}/epsilon",
+                         step_metric=f"learning/timestep")
+        wb.define_metric(f"option_{option_idx}/critic_loss",
+                         step_metric=f"learning/timestep")
