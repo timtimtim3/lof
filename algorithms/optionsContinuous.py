@@ -939,7 +939,7 @@ class MetaPolicyDQN(MetaPolicyContinuous):
                                gamma=self.gamma, init_epsilon=self.init_epsilon, final_epsilon=self.final_epsilon,
                                epsilon_decay_steps=self.epsilon_decay_steps, learning_starts=self.warmup_steps,
                                per=self.per, normalize_inputs=self.normalize_inputs, net_arch=self.net_arch,
-                               goal_prop=env.PHI_OBJ_TYPES[prop_idx])
+                               goal_prop=env.PHI_OBJ_TYPES[prop_idx], eval_freq=self.eval_freq)
             self.options.append(option)
 
     def get_epsilon_greedy_action(self,
