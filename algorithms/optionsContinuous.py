@@ -720,6 +720,7 @@ class MetaPolicyContinuous(ABC):
 
         acc_reward, success = 0, False
         num_steps = 0
+        neg_step_r = 0
 
         (f_state, state), p = eval_env.reset()
 
@@ -738,7 +739,6 @@ class MetaPolicyContinuous(ABC):
             options_used += 1
 
             first, steps_in_option, done = True, 0, False
-            neg_step_r = 0
 
             while ((steps_in_option < max_steps_option and tuple(state_cell) not in self.options[option].subgoal_cells)
                    or first):
