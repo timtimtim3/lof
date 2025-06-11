@@ -806,7 +806,8 @@ class MetaPolicyContinuous(ABC):
             if fname.startswith("Q_") and fname.endswith(".pkl"):
                 fsa_name = fname[len("Q_"):-len(".pkl")]
                 if fsa_name not in valid_names:
-                    raise ValueError(f"Found Q file for unknown FSA '{fsa_name}'")
+                    continue
+                    # raise ValueError(f"Found Q file for unknown FSA '{fsa_name}'")
                 path = os.path.join(base_dir, fname)
                 self.Q[fsa_name] = pkl.load(open(path, "rb"))
 
@@ -814,7 +815,8 @@ class MetaPolicyContinuous(ABC):
             elif fname.startswith("metapolicy_") and fname.endswith(".pkl"):
                 fsa_name = fname[len("metapolicy_"):-len(".pkl")]
                 if fsa_name not in valid_names:
-                    raise ValueError(f"Found metapolicy file for unknown FSA '{fsa_name}'")
+                    continue
+                    # raise ValueError(f"Found metapolicy file for unknown FSA '{fsa_name}'")
                 path = os.path.join(base_dir, fname)
                 self.mu[fsa_name] = pkl.load(open(path, "rb"))
 
